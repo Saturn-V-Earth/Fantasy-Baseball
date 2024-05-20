@@ -15,6 +15,7 @@ class GameState:
     ROSTER_SCREEN = 4
     FRONT_OFFICE = 5
     LOAD_GAME = 6
+    PLAY_GAME = 7
         
 class Menu:
     def __init__(self):
@@ -225,11 +226,13 @@ class CreateAccountScreen:
         pyxel.run(self.update, self.draw)
 
 class PlayerTeamScreen:
-    def __init__(self, selected_team, teamID):
+    def __init__(self, selected_team, teamID, schedule):
         self.selected_team = selected_team
         self.teamID = teamID
-        self.optionsPlayer = ["Next Game","Front Office", "Roster", "Hall of Fame", "Options"]
+        self.optionsPlayer = ["Play Game","Front Office", "Roster", "Hall of Fame", "Advance Week", "Options"]
         self.selectedPlayer = 0
+        self.schedule = schedule
+        self.current_round = 0
 
     def update(self):
         if pyxel.btnp(pyxel.KEY_DOWN):
@@ -242,10 +245,61 @@ class PlayerTeamScreen:
                 menu.state = GameState.ROSTER_SCREEN
             if selected_option == "Front Office":
                 menu.state = GameState.FRONT_OFFICE
+            if selected_option == "Advance Week":
+                self.current_round += 1
+                if self.current_round >= len(self.schedule):
+                    self.current_round = len(self.schedule)
+                menu.state = GameState.PLAYER_TEAM_SCREEN
+            if selected_option == "Play Game":
+                menu.state = GameState.PLAY_GAME_SCREEN
+    
+    def draw_schedule(self):
+        pyxel.text(50, 90, "Season Schedule", 1)
+        start_x = 5
+        start_y = 100
+        cell_width = 100
+        cell_height = 70
+
+        def draw_game(round_num, game, y):
+            pyxel.text(start_x, y, f"Round {round_num + 1}", 1)
+            home, away = game
+            if home == 'BYE':
+                hometeamName = home
+            else:
+                hometeamName = home.split()
+                hometeamName = hometeamName[len(hometeamName) - 1]
+            if away == 'BYE':
+                awayteamName = away
+            else:
+                awayteamName = away.split()
+                awayteamName = awayteamName[len(awayteamName) - 1]
+            pyxel.text(start_x + 10, y + 10, f"{hometeamName} vs {awayteamName}", 7)
+
+        y = start_y
+        previous_game_found = False
+
+        # Display the previous game
+        for round_num in range(self.current_round - 1, -1, -1):
+            for home, away in self.schedule[round_num]:
+                if home == self.selected_team or away == self.selected_team:
+                    draw_game(round_num, (home, away), y)
+                    y += cell_height
+                    previous_game_found = True
+                    break
+            if previous_game_found:
+                break
+
+        # Display the next game
+        for round_num in range(self.current_round, len(self.schedule)):
+            for home, away in self.schedule[round_num]:
+                if home == self.selected_team or away == self.selected_team:
+                    draw_game(round_num, (home, away), y)
+                    return  # Exit after drawing the next game
 
     def draw(self):
         pyxel.cls(12)
         pyxel.text(15, 10, f"Your Team: {self.selected_team}", 1)
+        self.draw_schedule()
         for i, option in enumerate(self.optionsPlayer):
             y = 30 + i * 10
             if i == self.selectedPlayer:
@@ -515,6 +569,75 @@ class RosterScreen:
                 pickle.dump(data, f)
             print("Saved roster to file")
             return self.players, self.BA, self.Fld, self.star_ratings, self.salaries
+        
+class Schedule:
+    def __init__(self, mlb_teamsNL, mlb_teamsAL, selected_team):
+        self.mlb_teamsNL = mlb_teamsNL
+        self.mlb_teamsAL = mlb_teamsAL
+        print(selected_team)
+        if selected_team in self.mlb_teamsNL:
+            self.teams = self.mlb_teamsNL
+        elif selected_team in self.mlb_teamsAL:
+            self.teams = self.mlb_teamsAL
+        if len(self.teams) % 2:
+            self.teams.append('BYE')  # If the number of teams is odd, add a dummy team "BYE"
+        self.num_rounds = len(self.teams) - 1
+        self.num_matches_per_round = len(self.teams) // 2
+        self.schedule = []
+
+    def generate_round_robin_schedule(self):
+        teams = self.teams[:]
+        for round in range(self.num_rounds):
+            round_matches = []
+            for match in range(self.num_matches_per_round):
+                home = teams[match]
+                away = teams[-(match + 1)]
+                round_matches.append((home, away))
+            teams.insert(1, teams.pop())  # Rotate teams to generate new pairs
+            self.schedule.append(round_matches)
+
+    def generate_home_away_schedule(self):
+        if not self.schedule:
+            self.generate_round_robin_schedule()
+        home_away_schedule = []
+        for round_matches in self.schedule:
+            home_away_schedule.append(round_matches)
+            home_away_schedule.append([(away, home) for home, away in round_matches])
+        return home_away_schedule
+
+    def get_Schedule(self):
+        self.schedule = self.generate_home_away_schedule()
+        return self.schedule
+    
+class PlayGame:
+    def __init__(self, selected_team):
+        self.selected_team = selected_team
+        self.win = 0
+        self.score = [0, 0]
+        self.inning = ["Top", 1]
+        self.outs = 0
+        self.Homelineup = []
+        self.Awaylineup = []
+    
+    def lineupScreen():
+        # Load an image file into image bank 0 at position (0, 0)
+        pyxel.images[0].load(0, 0, )
+
+        # Define the update function
+        def update():
+            if pyxel.btnp(pyxel.KEY_Q):
+                pyxel.quit()
+
+        # Define the draw function
+        def draw():
+            pyxel.cls(0)
+            # Draw the image from image bank 0 at position (10, 10) on the screen
+            pyxel.blt(0, 0, 0, 0, 0, 200, 200)
+        
+        pyxel.run(update, draw)
+    
+    pass
+
 
 mlb_teamsNL = [
     ("Philadelphia Phillies"), ("New York Mets"), ("Atlanta Braves"), ("Miami Marlins"), ("Washington Nationals"),
@@ -533,13 +656,15 @@ team_selection_screen = TeamSelectionScreen(mlb_teamsNL, mlb_teamsAL)
 load_game = loadGame()
 roster_screen = None
 front_office = None
+play_game = None
 
 def update():
-    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen
+    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen, schedule
     if menu.state == GameState.MENU:
         menu.update()
     elif menu.state == GameState.TEAM_SELECTION:
         selected_team, teamID = team_selection_screen.update()
+        schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL)
         if selected_team:
             create_account_screen = CreateAccountScreen(selected_team, teamID)
             menu.state = GameState.CREATE_ACCOUNT
@@ -547,12 +672,16 @@ def update():
         load_game.update()
         if pyxel.btnp(pyxel.KEY_RETURN):
             selected_team, teamID = load_game.load_selected_game()
-            player_team_screen = PlayerTeamScreen(selected_team, teamID)
+            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, selected_team)
+            schedule = schedule_.get_Schedule()
+            player_team_screen = PlayerTeamScreen(selected_team, teamID, schedule)
             menu.state = GameState.PLAYER_TEAM_SCREEN
     elif menu.state == GameState.CREATE_ACCOUNT:
         create_account_screen.update()
         if create_account_screen.createdAccount:
-            player_team_screen = PlayerTeamScreen(selected_team, teamID)
+            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, selected_team)
+            schedule = schedule_.get_Schedule()
+            player_team_screen = PlayerTeamScreen(selected_team, teamID, schedule)
             menu.state = GameState.PLAYER_TEAM_SCREEN
     elif menu.state == GameState.PLAYER_TEAM_SCREEN:
         player_team_screen.update()
@@ -565,12 +694,19 @@ def update():
                 selected_team, teamID = player_team_screen.selected_team, player_team_screen.teamID
                 roster_screen = RosterScreen(selected_team, teamID)
                 menu.state = GameState.ROSTER_SCREEN
+            if selected_option == "Play Game":
+                selected_team, teamID = player_team_screen.selected_team, player_team_screen.teamID
+                play_game = PlayGame(selected_team)
+                menu.state = GameState.PLAY_GAME
     elif menu.state == GameState.ROSTER_SCREEN:
         if roster_screen:
             roster_screen.update()
     elif menu.state == GameState.FRONT_OFFICE:
         if front_office:
             front_office.update()
+    elif menu.state == GameState.PLAY_GAME:
+        if play_game:
+            play_game.update()
 
 def draw():
     if menu.state == GameState.MENU:
@@ -589,5 +725,8 @@ def draw():
     elif menu.state == GameState.FRONT_OFFICE:
         if front_office:
             front_office.draw()
+    elif menu.state == GameState.PLAY_GAME:
+        if play_game:
+            play_game.draw()
 
 pyxel.run(update, draw)
