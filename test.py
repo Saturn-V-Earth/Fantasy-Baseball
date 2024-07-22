@@ -1,11 +1,11 @@
-"""
+
 import pyxel
 
 # Initialize Pyxel with a window size of 160x120
 pyxel.init(160, 120)
 
 # Load an image file into image bank 0 at position (0, 0)
-pyxel.images[0].load(0, 0, )
+pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612.jpg")
 
 # Define the update function
 def update():
@@ -20,8 +20,8 @@ def draw():
 
 # Run the Pyxel application
 pyxel.run(update, draw)
-"""
 
+"""
 def generate_round_robin_schedule(teams):
     if len(teams) % 2:
         teams.append('BYE')  # If the number of teams is odd, add a dummy team "BYE"
@@ -64,3 +64,4 @@ for round_num, round_matches in enumerate(schedule):
     for home, away in round_matches:
         if home != 'BYE' and away != 'BYE':
             print(f"{home} vs {away}")
+"""

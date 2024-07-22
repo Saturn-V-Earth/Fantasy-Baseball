@@ -15,7 +15,7 @@ class GameState:
     ROSTER_SCREEN = 4
     FRONT_OFFICE = 5
     LOAD_GAME = 6
-    PLAY_GAME = 7
+    PLAY_GAME_SCREEN = 7
         
 class Menu:
     def __init__(self):
@@ -251,7 +251,9 @@ class PlayerTeamScreen:
                     self.current_round = len(self.schedule)
                 menu.state = GameState.PLAYER_TEAM_SCREEN
             if selected_option == "Play Game":
+                play_game_screen = PlayGameScreen(self.selected_team, self.teamID)
                 menu.state = GameState.PLAY_GAME_SCREEN
+
     
     def draw_schedule(self):
         pyxel.text(50, 90, "Season Schedule", 1)
@@ -609,35 +611,68 @@ class Schedule:
         self.schedule = self.generate_home_away_schedule()
         return self.schedule
     
-class PlayGame:
-    def __init__(self, selected_team):
+class PlayGameScreen:
+    def __init__(self, selected_team, team_id):
         self.selected_team = selected_team
-        self.win = 0
-        self.score = [0, 0]
-        self.inning = ["Top", 1]
-        self.outs = 0
-        self.Homelineup = []
-        self.Awaylineup = []
-    
-    def lineupScreen():
-        # Load an image file into image bank 0 at position (0, 0)
-        pyxel.images[0].load(0, 0, )
-
-        # Define the update function
-        def update():
-            if pyxel.btnp(pyxel.KEY_Q):
-                pyxel.quit()
-
-        # Define the draw function
-        def draw():
-            pyxel.cls(0)
-            # Draw the image from image bank 0 at position (10, 10) on the screen
-            pyxel.blt(0, 0, 0, 0, 0, 200, 200)
+        self.team_id = team_id
+        self.players = self.load_player_data()
+        self.remaining_players = []
+        pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612 (3).jpg")
+        self.current_player_index = 0
         
-        pyxel.run(update, draw)
-    
-    pass
+        # Define the coordinates for each position
+        self.position_coords = {
+            'P': (35, 87),
+            'C': (55, 100),
+            '1B': (100, 80),
+            '2B': (80, 50),
+            '3B': (20, 80),
+            'SS': (50, 65),
+            'LF': (10, 35),
+            'CF': (55, 20),
+            'RF': (85, 35),
+            'DH': (95, 106)
+        }
 
+    def load_player_data(self):
+        filename = f'team_{self.team_id:03d}_roster.pkl'
+        with open(filename, 'rb') as f:
+            data = pickle.load(f)
+        return data['players']
+
+    def update(self):
+        if pyxel.btnp(pyxel.KEY_Q):
+            menu.state = GameState.PLAYER_TEAM_SCREEN
+        if pyxel.btnp(pyxel.KEY_LEFT) and len(self.remaining_players) > 1:
+            self.current_player_index = (self.current_player_index - 1) % len(self.remaining_players)
+        elif pyxel.btnp(pyxel.KEY_RIGHT) and len(self.remaining_players) > 1:
+            self.current_player_index = (self.current_player_index + 1) % len(self.remaining_players)
+
+    def draw(self):
+        pyxel.cls(5)
+        pyxel.blt(0, 0, 0, 0, 0, 160, 120)
+        pyxel.text(60, 7,"PLAY GAME", 1)
+        
+        filled_positions = set()  # Reset filled positions
+
+        # Iterate through the players and display their names and positions
+        for player in self.players:
+            position = player['position']
+            if position in self.position_coords and position not in filled_positions:
+                x, y = self.position_coords[position]
+                text = f"{player['fullname']} \n{position}"
+                pyxel.text(x, y, text, 0)
+                filled_positions.add(position)
+            else:
+                self.remaining_players.append(player)
+
+        if self.remaining_players:
+            player = self.remaining_players[self.current_player_index]
+            position = self.remaining_players[self.current_player_index]['position']
+            text = f"Remaining players: \n< {player['fullname']} - {position} >"
+            pyxel.text(5, 115, text, 7)
+            
+            
 
 mlb_teamsNL = [
     ("Philadelphia Phillies"), ("New York Mets"), ("Atlanta Braves"), ("Miami Marlins"), ("Washington Nationals"),
@@ -656,15 +691,14 @@ team_selection_screen = TeamSelectionScreen(mlb_teamsNL, mlb_teamsAL)
 load_game = loadGame()
 roster_screen = None
 front_office = None
-play_game = None
+play_game_screen = None
 
 def update():
-    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen, schedule
+    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen, schedule, play_game_screen
     if menu.state == GameState.MENU:
         menu.update()
     elif menu.state == GameState.TEAM_SELECTION:
         selected_team, teamID = team_selection_screen.update()
-        schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL)
         if selected_team:
             create_account_screen = CreateAccountScreen(selected_team, teamID)
             menu.state = GameState.CREATE_ACCOUNT
@@ -696,17 +730,17 @@ def update():
                 menu.state = GameState.ROSTER_SCREEN
             if selected_option == "Play Game":
                 selected_team, teamID = player_team_screen.selected_team, player_team_screen.teamID
-                play_game = PlayGame(selected_team)
-                menu.state = GameState.PLAY_GAME
+                play_game_screen = PlayGameScreen(selected_team, teamID)
+                menu.state = GameState.PLAY_GAME_SCREEN
     elif menu.state == GameState.ROSTER_SCREEN:
         if roster_screen:
             roster_screen.update()
     elif menu.state == GameState.FRONT_OFFICE:
         if front_office:
             front_office.update()
-    elif menu.state == GameState.PLAY_GAME:
-        if play_game:
-            play_game.update()
+    elif menu.state == GameState.PLAY_GAME_SCREEN:
+        if play_game_screen:
+            play_game_screen.update()
 
 def draw():
     if menu.state == GameState.MENU:
@@ -725,8 +759,10 @@ def draw():
     elif menu.state == GameState.FRONT_OFFICE:
         if front_office:
             front_office.draw()
-    elif menu.state == GameState.PLAY_GAME:
-        if play_game:
-            play_game.draw()
+    elif menu.state == GameState.PLAY_GAME_SCREEN:
+        if play_game_screen:
+            play_game_screen.draw()
+
+
 
 pyxel.run(update, draw)
