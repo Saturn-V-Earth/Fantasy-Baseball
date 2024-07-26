@@ -16,6 +16,7 @@ class GameState:
     FRONT_OFFICE = 5
     LOAD_GAME = 6
     PLAY_GAME_SCREEN = 7
+    GAME = 8
         
 class Menu:
     def __init__(self):
@@ -617,8 +618,9 @@ class PlayGameScreen:
         self.team_id = team_id
         self.players = self.load_player_data()
         self.remaining_players = []
-        pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612 (3).jpg")
         self.current_player_index = 0
+        self.mode = 'cycle'  # Modes: 'cycle' or 'play'
+        pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612 (3).jpg")
         
         # Define the coordinates for each position
         self.position_coords = {
@@ -643,10 +645,19 @@ class PlayGameScreen:
     def update(self):
         if pyxel.btnp(pyxel.KEY_Q):
             menu.state = GameState.PLAYER_TEAM_SCREEN
-        if pyxel.btnp(pyxel.KEY_LEFT) and len(self.remaining_players) > 1:
-            self.current_player_index = (self.current_player_index - 1) % len(self.remaining_players)
-        elif pyxel.btnp(pyxel.KEY_RIGHT) and len(self.remaining_players) > 1:
-            self.current_player_index = (self.current_player_index + 1) % len(self.remaining_players)
+        
+        if self.mode == 'cycle':
+            if pyxel.btnp(pyxel.KEY_LEFT) and len(self.remaining_players) > 1:
+                self.current_player_index = (self.current_player_index - 1) % len(self.remaining_players)
+            elif pyxel.btnp(pyxel.KEY_RIGHT) and len(self.remaining_players) > 1:
+                self.current_player_index = (self.current_player_index + 1) % len(self.remaining_players)
+            elif pyxel.btnp(pyxel.KEY_DOWN):
+                self.mode = 'play'
+        elif self.mode == 'play':
+            if pyxel.btnp(pyxel.KEY_UP):
+                self.mode = 'cycle'
+            elif pyxel.btnp(pyxel.KEY_RETURN):
+                menu.state = GameState.GAME
 
     def draw(self):
         pyxel.cls(5)
@@ -666,12 +677,37 @@ class PlayGameScreen:
             else:
                 self.remaining_players.append(player)
 
-        if self.remaining_players:
+        # Display remaining players in cycle mode
+        if self.mode == 'cycle' and self.remaining_players:
+            pyxel.text(5, 110, "> Reserves", 7)
             player = self.remaining_players[self.current_player_index]
-            position = self.remaining_players[self.current_player_index]['position']
-            text = f"Remaining players: \n< {player['fullname']} - {position} >"
-            pyxel.text(5, 115, text, 7)
-            
+            position = player['position']
+            text = f"< {player['fullname']} - {position} >"
+            pyxel.text(5, 120, text, 7)
+
+        # Display "Press Enter to Play" in play mode
+        if self.mode == 'play':
+            pyxel.text(5, 110, "> Play", 7)
+            pyxel.text(10, 120, "Press Enter to Play", 7)
+
+class Game:
+    def __init__(self, selected_team, team_id):
+        self.selected_team = selected_team
+        self.team_id = team_id
+        self.init_game()
+        pyxel.images[0].load(0, 0, "pixilart-sprite (2) (1).jpg")
+
+    def init_game(self):
+        self.score = {self.selected_team: 0, 'Opponent': 0}
+        self.inning = 1
+        self.half_inning = 'top'
+        self.outs = 0
+
+    def draw(self):
+        pyxel.cls(5)
+        pyxel.blt(0, 0, 0, 0, 0, 160, 120)
+
+    
             
 
 mlb_teamsNL = [
@@ -692,9 +728,10 @@ load_game = loadGame()
 roster_screen = None
 front_office = None
 play_game_screen = None
+game = None
 
 def update():
-    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen, schedule, play_game_screen
+    global selected_team, teamID, player_team_screen, roster_screen, front_office, create_account_screen, schedule, play_game_screen, game
     if menu.state == GameState.MENU:
         menu.update()
     elif menu.state == GameState.TEAM_SELECTION:
@@ -741,6 +778,9 @@ def update():
     elif menu.state == GameState.PLAY_GAME_SCREEN:
         if play_game_screen:
             play_game_screen.update()
+    elif menu.state == GameState.GAME:
+        if game:
+            game.update()
 
 def draw():
     if menu.state == GameState.MENU:
@@ -762,6 +802,9 @@ def draw():
     elif menu.state == GameState.PLAY_GAME_SCREEN:
         if play_game_screen:
             play_game_screen.draw()
+    elif menu.state == GameState.GAME:
+        if game:
+            game.draw()
 
 
 
