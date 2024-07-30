@@ -672,19 +672,96 @@ class PlayGameScreen:
             pyxel.text(5, 110, "> Play", 7)
             pyxel.text(10, 120, "Press Enter to Play", 7)
 
+class SlidingBar:
+    def __init__(self, x, y, width, height, direction='horizontal', min_value=0, max_value=100, gradient_colors=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.direction = direction
+        self.min_value = min_value
+        self.max_value = max_value
+        self.value = min_value
+        self.moving_forward = True 
+        self.horistopped = False
+        self.vertstopped = False
+        
+        # Use provided gradient colors or default gradient colors
+        if gradient_colors is None:
+            self.gradient_colors = [7, 15, 10, 9, 8, 9, 10, 15, 7]
+        else:
+            self.gradient_colors = gradient_colors
+
+    def update(self):
+        if not self.horistopped:
+            if self.direction == 'horizontal':
+                if self.moving_forward:
+                    self.value += 2
+                    if self.value >= self.max_value:
+                        self.moving_forward = False
+                else:
+                    self.value -= 2
+                    if self.value <= self.min_value:
+                        self.moving_forward = True
+        if not self.vertstopped:
+            if self.direction == 'vertical':
+                if self.moving_forward:
+                    self.value += 2
+                    if self.value >= self.max_value:
+                        self.moving_forward = False
+                else:
+                    self.value -= 2
+                    if self.value <= self.min_value:
+                        self.moving_forward = True
+
+        # Stop the bar movement when the "A" button (assumed to be pyxel.KEY_A) is pressed
+        if pyxel.btnp(pyxel.KEY_P):
+            self.horistopped = True
+        
+        if pyxel.btnp(pyxel.KEY_A):
+            self.vertstopped = True
+        
+    def draw_gradient_rect(self, x, y, width, height, colors, direction='horizontal'):
+        num_colors = len(colors)
+        for i in range(width if direction == 'horizontal' else height):
+            color_index = i * (num_colors) // (width if direction == 'horizontal' else height)
+            color = colors[color_index]
+            if direction == 'horizontal':
+                pyxel.line(x + i, y, x + i, y + height, color)
+            else:
+                pyxel.line(x, y + i, x + width, y + i, color)
+
+    def draw(self):
+        if self.direction == 'horizontal':
+            self.draw_gradient_rect(self.x, self.y, self.width, self.height, self.gradient_colors, 'horizontal')
+            slider_position = self.x + (self.value - self.min_value) * self.width // (self.max_value - self.min_value)
+            pyxel.rect(slider_position - 2, self.y, 4, self.height, 1)
+        elif self.direction == 'vertical':
+            self.draw_gradient_rect(self.x, self.y, self.width, self.height, self.gradient_colors, 'vertical')
+            slider_position = self.y + (self.value - self.min_value) * self.height // (self.max_value - self.min_value)
+            pyxel.rect(self.x, slider_position - 2, self.width, 4, 1)
+
 class Game:
     def __init__(self):
         self.init_game()
         pyxel.images[1].load(0, 0, "pixilart-sprite (2) (1).jpg")
+        self.power_bar = SlidingBar(105, 5, 50, 10, direction='horizontal')
+        self.angle_bar = SlidingBar(145, 20, 10, 50, direction='vertical')
 
     def init_game(self):
         self.inning = 1
         self.half_inning = 'top'
         self.outs = 0
 
+    def update(self):
+        self.power_bar.update()
+        self.angle_bar.update()
+
     def draw(self):
         pyxel.cls(5)
         pyxel.blt(0, 0, 1, 0, 0, 160, 120)
+        self.power_bar.draw()
+        self.angle_bar.draw()
 
 # Define MLB teams
 mlb_teamsNL = [
@@ -734,7 +811,7 @@ class GameStateManager:
         elif self.menu.state == GameState.PLAY_GAME_SCREEN:
             self.update_play_game_screen()
         elif self.menu.state == GameState.GAME:
-            pass
+            self.game.update()
 
     def draw(self):
         if self.menu.state == GameState.MENU:
