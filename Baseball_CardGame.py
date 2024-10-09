@@ -18,6 +18,7 @@ class GameState:
     LOAD_GAME = 6
     PLAY_GAME_SCREEN = 7
     GAME = 8
+    POST_GAME = 9
         
 class Menu:
     def __init__(self):
@@ -124,8 +125,13 @@ class loadGame:
         self.coachFirstName = self.loaded_data['coachFirstName']
         self.coachLastName = self.loaded_data['coachLastName']
         self.CoachingCredits = self.loaded_data['CoachingCredits']
+
+        self.stadium = self.loaded_data['stadium']
+        self.training_facilitys = self.loaded_data['training_facilitys']
+        self.rehab_facilitys = self.loaded_data['rehab_facilitys']
+
         self.state = GameState.FRONT_OFFICE
-        return self.teamID, self.selected_team
+        return self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName
 
     def draw(self):
         pyxel.cls(12)
@@ -133,8 +139,12 @@ class loadGame:
         for i, filename in enumerate(self.saved_games):
             y = 60 + i * 10
             if i == self.selected_index:
+                filename = filename[:-12]
+                filename = filename.translate({ord("_"): " "})
                 pyxel.text(10, y, "> " + filename, 0)
             else:
+                filename = filename[:-12]
+                filename = filename.translate({ord("_"): " "})
                 pyxel.text(10, y, filename, 7)
 
 class CreateAccountScreen:
@@ -144,6 +154,11 @@ class CreateAccountScreen:
         self.coachFirstName = ""
         self.coachLastName = ""
         self.CoachingCredits = 10
+
+        self.stadium = 1
+        self.training_facilitys = 1
+        self.rehab_facilitys = 1
+
         self.current_input = "first_name"  # Track which input field is active
         self.createdAccount = False  # Track if the account has been created
 
@@ -155,6 +170,17 @@ class CreateAccountScreen:
     
     def get_CoachingCredits(self):
         return self.CoachingCredits
+    
+
+    def get_stadium(self):
+        return self.stadium
+    
+    def get_training_facilitys(self):
+        return self.training_facilitys
+    
+    def get_rehab_facilitys(self):
+        return self.rehab_facilitys
+    
 
     def update(self):
         # Switch between input fields using the Tab key
@@ -216,7 +242,10 @@ class CreateAccountScreen:
             'selected_team': self.selected_team,
             'coachFirstName': self.coachFirstName,
             'coachLastName': self.coachLastName,
-            'CoachingCredits': self.CoachingCredits
+            'CoachingCredits': self.CoachingCredits,
+            'stadium': self.stadium,
+            'training_facilitys': self.training_facilitys,
+            'rehab_facilitys': self.rehab_facilitys
         }
 
         filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
@@ -229,10 +258,11 @@ class CreateAccountScreen:
 
 
 class PlayerTeamScreen:
-    def __init__(self, selected_team, teamID, schedule):
+    def __init__(self, selected_team, teamID, schedule, coachingCredits):
         self.selected_team = selected_team
         self.teamID = teamID
         self.optionsPlayer = ["Play Game", "Front Office", "Roster", "Hall of Fame", "Advance Week", "Options"]
+        self.CoachingCredits = coachingCredits
         self.selectedPlayer = 0
         self.schedule = schedule
         self.current_round = 0
@@ -330,10 +360,10 @@ class PlayerTeamScreen:
         # If no valid game is found, return None for both teams
         return None, None
 
-
     def draw(self):
         pyxel.cls(12)
         pyxel.text(15, 10, f"Your Team: {self.selected_team}", 1)
+        pyxel.text(15, 20, f"Coaching Credits: {self.CoachingCredits}", 1)
         self.draw_schedule()
         for i, option in enumerate(self.optionsPlayer):
             y = 30 + i * 10
@@ -343,10 +373,13 @@ class PlayerTeamScreen:
                 pyxel.text(30, y, option, 7)
 
 class FrontOffice:
-    def __init__(self):
-        self.stadium = 1
-        self.training_facilities = 1
-        self.rehab_facilities = 1
+    def __init__(self, coachingCredits, stadium, training_facilities, rehab_facilities, coachFirstName, coachLastName):
+        self.coachFirstName = coachFirstName
+        self.coachLastName = coachLastName
+        self.CoachingCredits = coachingCredits
+        self.stadium = stadium
+        self.training_facilitys = training_facilities
+        self.rehab_facilitys = rehab_facilities
         self.increase_salary_cap = False
         self.free_agents = False
         self.staff_Hires = False
@@ -374,23 +407,76 @@ class FrontOffice:
 
         if pyxel.btnp(pyxel.KEY_RETURN):
             if self.axis == "vertical":
-                selected_option = self.Verticaloptions[self.selectedVerticalOption]
-                print(f"Selected vertical option: {selected_option}")
+                # Spend coaching credit to upgrade
+                if self.CoachingCredits > 0:
+                    selected_option = self.Verticaloptions[self.selectedVerticalOption]
+                    if selected_option == "Upgrade Stadium" and self.stadium < 10:
+                        self.stadium += 1
+                        self.CoachingCredits -= 1
+                    elif selected_option == "Upgrade Training Facilities" and self.training_facilitys < 10:
+                        self.training_facilitys += 1
+                        self.CoachingCredits -= 1
+                    elif selected_option == "Upgrade Rehab Facilities" and self.rehab_facilitys < 10:
+                        self.rehab_facilitys += 1
+                        self.CoachingCredits -= 1
+                    self.save_account()
+                else:
+                    print("Not enough coaching credits!")
+
             elif self.axis == "horizontal":
                 selected_option = self.Horizontaloptions[self.selectedHorizontalOption]
                 print(f"Selected horizontal option: {selected_option}")
 
+    def save_account(self):
+        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
+        
+        # Check if file exists and load existing data
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                account_data = pickle.load(f)
+        else:
+            # If no file exists, create a new dictionary
+            account_data = {}
+
+        # Update the relevant fields in the loaded account data
+        account_data['CoachingCredits'] = self.CoachingCredits
+        account_data['stadium'] = self.stadium
+        account_data['training_facilitys'] = self.training_facilitys
+        account_data['rehab_facilitys'] = self.rehab_facilitys
+
+        # Write updated data back to the file
+        with open(filename, 'wb') as f:
+            pickle.dump(account_data, f)
+        print(f"Account saved to {filename}")
+        
+    @staticmethod
+    def draw_progress_bar(x, y, current_level, total_bars=10):
+        for i in range(total_bars):
+            if i < current_level:
+                pyxel.rect(x + i * 12, y, 10, 5, 10)  # Filled bar (yellow)
+            else:
+                pyxel.rect(x + i * 12, y, 10, 5, 5)  # Unfilled bar (grey)
+
     def draw(self):
         pyxel.cls(12)
         pyxel.text(60, 10, "Front Office", 1)
+        pyxel.text(15, 120, f"Coaching Credits: {self.CoachingCredits}", 1)
 
-        # Draw vertical options
+        # Draw vertical options and bars
         for i, option in enumerate(self.Verticaloptions):
-            y = 25 + i * 10
+            y = 25 + i * 20
             if self.axis == "vertical" and i == self.selectedVerticalOption:
                 pyxel.text(15, y, "> " + option, 0)
             else:
                 pyxel.text(15, y, option, 7)
+
+            # Draw the progress bars
+            if option == "Upgrade Stadium":
+                FrontOffice.draw_progress_bar(15, y + 10, self.stadium)
+            elif option == "Upgrade Training Facilities":
+                FrontOffice.draw_progress_bar(15, y + 10, self.training_facilitys)
+            elif option == "Upgrade Rehab Facilities":
+                FrontOffice.draw_progress_bar(15, y + 10, self.rehab_facilitys)
 
         # Draw horizontal options
         for j, option in enumerate(self.Horizontaloptions):
@@ -685,6 +771,8 @@ class PlayGameScreen(Schedule):
 
         # Load the opponent for the given week
         self.opponent_players = self.load_player_data(self.opponent_team_id) if self.opponent_team_id else []
+        self.opponent_batting_order = []  # 9 players excluding the pitcher
+        self.opponent_bench = []  # Remaining non-pitcher players
 
         # Define position coordinates
         self.position_coords = {
@@ -747,6 +835,16 @@ class PlayGameScreen(Schedule):
             else:
                 self.bench.append(player)
 
+        for player in self.opponent_players:
+            position = player['position']
+            if position == 'P':
+                self.opponent_pitcher = player  # Assign the pitcher
+            elif len(self.opponent_batting_order) < 9:
+                self.opponent_batting_order.append(player)
+                filled_positions.add(position)
+            else:
+                self.opponent_bench.append(player)
+
     def update(self):
         if self.mode == 'cycle':
             if pyxel.btnp(pyxel.KEY_LEFT) and len(self.remaining_players) > 1:
@@ -757,16 +855,21 @@ class PlayGameScreen(Schedule):
                 self.mode = 'play'
             elif pyxel.btnp(pyxel.KEY_B):
                 self.mode = 'Batting Order'
-            elif pyxel.btnp(pyxel.KEY_RIGHT):
+            elif pyxel.btnp(pyxel.KEY_D):
                 self.mode = 'Other Team'
         elif self.mode == 'play':
             if pyxel.btnp(pyxel.KEY_UP):
                 self.mode = 'cycle'
         elif self.mode == 'Batting Order':
-            if pyxel.btnp(pyxel.KEY_UP):
+            if pyxel.btnp(pyxel.KEY_B):
                 self.mode = 'cycle'
+        elif self.mode == 'Oppenent Batting Order':
+            if pyxel.btnp(pyxel.KEY_B):
+                self.mode = 'Other Team'
         elif self.mode == 'Other Team':
-            if pyxel.btnp(pyxel.KEY_LEFT):
+            if pyxel.btnp(pyxel.KEY_B):
+                self.mode = 'Oppenent Batting Order'
+            if pyxel.btnp(pyxel.KEY_A):
                 self.mode = 'cycle'
 
     def draw(self):
@@ -794,8 +897,8 @@ class PlayGameScreen(Schedule):
                     self.remaining_players.append(player)
 
         # Display the opponent team (if not a BYE week)
-        if self.opponent_team and self.mode == 'cycle':
-            pyxel.text(10, 20, f"Opponent Team: {self.opponent_team}", 7)
+        if self.mode == 'Other Team':
+            pyxel.text(5, 120, f"> Opponent Team: {self.opponent_team}", 7)
             for player in self.opponent_players:
                 position = player['position']
                 if position in self.position_coords and position not in filled_positions:
@@ -815,6 +918,18 @@ class PlayGameScreen(Schedule):
                 pyxel.text(20, y, text, 0)
                 y += 10
                 no_in_batting += 1
+        
+        if self.mode == 'Oppenent Batting Order':
+            pyxel.text(5, 120, f"> Opponent Team: {self.opponent_team}", 7)
+            y = 20
+            no_in_batting = 1
+            pyxel.text(10, 10, 'Batting Order', 7)
+            for player in self.opponent_batting_order:
+                position = player['position']
+                text = f"{no_in_batting}. {player['fullname']} - {position}"
+                pyxel.text(20, y, text, 0)
+                y += 10
+                no_in_batting += 1
 
         # Display remaining players in cycle mode
         if self.remaining_players and (self.mode == 'cycle' or self.mode == 'Batting Order'):
@@ -822,7 +937,7 @@ class PlayGameScreen(Schedule):
             player = self.remaining_players[self.current_player_index]
             position = player['position']
             text = f"\n{player['fullname']} ({position})"
-            pyxel.text(30, 110, text, 7)
+            pyxel.text(10, 110, text, 7)
 
 
 class DeckShuffler:
@@ -892,6 +1007,7 @@ class DeckShuffler:
 
     def mega_shuffle(self):
         # List of shuffle methods to apply
+        self.deck = self.create_default_deck()
         shuffle_funcs = [self.riffle_shuffle, self.overhand_shuffle, self.smoosh_shuffle]
         for _ in range(3):  # Repeat the shuffling process three times
             # Randomly shuffle the list of shuffle functions and apply them in that order
@@ -929,10 +1045,11 @@ class DeckShuffler:
         return self.mega_shuffle()
 
 class Game:
-    def __init__(self, batting_order, bench):
+    def __init__(self, batting_order, opponent_batting_order, bench):
         # Initialize game state variables
         pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612 (3).jpg")
         self.batting_order = batting_order
+        self.opponent_batting_order = opponent_batting_order
         self.bench = bench
         self.current_card = None
         self.inning = 1
@@ -945,25 +1062,21 @@ class Game:
         self.batter_turn_started = False  # Flag to indicate if the batter's turn has started
         self.strike = 0
         self.ball = 0
-
-        # Load batting order from PlayGameScreen
-        self.away_team_batters = ["Away Batter 1", "Away Batter 2", "Away Batter 3",
-                                  "Away Batter 4", "Away Batter 5", "Away Batter 6",
-                                  "Away Batter 7", "Away Batter 8", "Away Batter 9"]
-
+ 
         # Initialize the deck using the DeckShuffler class
         self.deck_shuffler = DeckShuffler()
         self.new_deck()
 
         # Define the coordinates for displaying scores and other information
         self.score_coords = {
-            'home': (10, 10),
-            'away': (100, 10),
-            'inning': (60, 10),
-            'outs': (60, 20),
-            'card': (60, 30),  # Coordinates for the card display
-            'strike_ball': (60, 40),  # Coordinates for strikes and balls display
-            'batter': (60, 50)  # Coordinates for the current batter display
+            'home': (10, 5),
+            'away': (120, 5),
+            'inning': (60, 5),
+            'outs': (10, 35),
+            'card': (90, 15),  # Coordinates for the card display
+            'strike_ball': (10, 15),  # Coordinates for strikes and balls display
+            'ball': (10, 25),
+            'batter': (10, 110)  # Coordinates for the current batter display
         }
 
     def new_deck(self):
@@ -1036,7 +1149,7 @@ class Game:
     def handle_strike(self):
         # Handle the logic when a strike is drawn
         self.strike += 1
-        if self.strike >= 3:
+        if self.strike == 3:
             self.handle_out()
 
     def handle_ball(self):
@@ -1115,11 +1228,7 @@ class Game:
             self.away_score += 1
 
     def end_inning(self):
-        # Handle the end of an inning
-        if self.inning >= 9:
-            self.end_game()
-        else:
-            self.start_inning()
+        self.start_inning()
 
     def draw_card(self):
         # Draw the next card from the deck
@@ -1150,10 +1259,11 @@ class Game:
         pyxel.text(self.score_coords['away'][0], self.score_coords['away'][1], f"Away: {self.away_score}", 7)
         pyxel.text(self.score_coords['inning'][0], self.score_coords['inning'][1], f"Inning: {self.inning}", 7)
         pyxel.text(self.score_coords['outs'][0], self.score_coords['outs'][1], f"Outs: {self.outs}", 7)
-        pyxel.text(10, 100, "Press SPACE to draw a card", 7)
+        pyxel.text(30, 120, "Press SPACE to draw a card", 7)
         
         # Display strikes and balls
-        pyxel.text(self.score_coords['strike_ball'][0], self.score_coords['strike_ball'][1], f"Strikes: {self.strike} Balls: {self.ball}", 7)
+        pyxel.text(self.score_coords['strike_ball'][0], self.score_coords['strike_ball'][1], f"Strikes: {self.strike}", 7)
+        pyxel.text(self.score_coords['ball'][0], self.score_coords['ball'][1], f"Balls: {self.ball}", 7)
         
         # Display bases
         positions = ["1B", "2B", "3B"]
@@ -1173,9 +1283,42 @@ class Game:
             current_batter = current_batter.translate({ord("{"): None})
             current_batter = current_batter.translate({ord("}"): None})
         else:
-            current_batter = self.away_team_batters[self.current_batter_index]
+            current_batter = str({self.opponent_batting_order[self.current_batter_index]['fullname']})
+            current_batter = current_batter.translate({ord("'"): None})
+            current_batter = current_batter.translate({ord("{"): None})
+            current_batter = current_batter.translate({ord("}"): None})
         pyxel.text(self.score_coords['batter'][0], self.score_coords['batter'][1], f"Batter: {current_batter}", 7)
 
+class PostGameScreen:
+    def __init__(self, home_score, away_score, batting_order, opponent_batting_order):
+        self.home_score = home_score
+        self.away_score = away_score
+        self.batting_order = batting_order
+        self.opponent_batting_order = opponent_batting_order
+        self.winner = "Home" if home_score > away_score else "Away" if away_score > home_score else "Tie"
+
+        # Define coordinates for displaying the post-game information
+        self.score_coords = {
+            'result': (60, 30),
+            'home': (10, 60),
+            'away': (120, 60),
+            'winner': (60, 90)
+        }
+
+    def draw(self):
+        # Clear the screen for the post-game view
+        pyxel.cls(0)
+
+        # Display the final scores
+        pyxel.text(self.score_coords['home'][0], self.score_coords['home'][1], f"Home: {self.home_score}", 7)
+        pyxel.text(self.score_coords['away'][0], self.score_coords['away'][1], f"Away: {self.away_score}", 7)
+
+        # Display the winner
+        pyxel.text(self.score_coords['winner'][0], self.score_coords['winner'][1], f"Winner: {self.winner}", 7)
+
+        # Optionally display some player statistics
+        pyxel.text(10, 120, "Press R to restart or Q to quit", 7)
+        
 # Define MLB teams
 mlb_teamsNL = [
     "Philadelphia Phillies", "New York Mets", "Atlanta Braves", "Miami Marlins", "Washington Nationals",
@@ -1205,6 +1348,7 @@ class GameStateManager:
         self.schedule = None
         self.player_team_screen = None
         self.game = None
+        self.post_game_screen = None
 
     def update(self):
         if self.menu.state == GameState.MENU:
@@ -1225,6 +1369,8 @@ class GameStateManager:
             self.update_play_game_screen()
         elif self.menu.state == GameState.GAME:
             self.update_game()
+        elif self.menu.state == GameState.POST_GAME:
+            self.update_post_game()
 
     def draw(self):
         if self.menu.state == GameState.MENU:
@@ -1245,6 +1391,8 @@ class GameStateManager:
             self.play_game_screen.draw()
         elif self.menu.state == GameState.GAME and self.game:
             self.game.draw()
+        elif self.menu.state == GameState.POST_GAME and self.post_game_screen:
+            self.post_game_screen.draw()
 
     def update_team_selection(self):
         self.selected_team, self.teamID = self.team_selection_screen.update()
@@ -1255,7 +1403,7 @@ class GameStateManager:
     def update_load_game(self):
         self.load_game.update()
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.selected_team, self.teamID = self.load_game.load_selected_game()
+            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName = self.load_game.load_selected_game()
 
             # Check if player_team_screen is initialized
             if self.player_team_screen is not None:
@@ -1265,22 +1413,22 @@ class GameStateManager:
 
             schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, current_round)
             self.schedule = schedule_.get_schedule()
-            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule)
+            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits)
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
 
     def update_create_account(self):
         self.create_account_screen.update()
         if self.create_account_screen.createdAccount:
             # Check if player_team_screen is initialized
-            
+
             if self.player_team_screen is not None:
                 current_round = self.player_team_screen.current_round
             else:
                 current_round = 0  # Default to 0 or some appropriate fallback
 
-            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team)
+            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, current_round)
             self.schedule = schedule_.get_schedule()
-            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, current_round)
+            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits)
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
 
     def update_player_team_screen(self):
@@ -1288,9 +1436,12 @@ class GameStateManager:
 
         if pyxel.btnp(pyxel.KEY_RETURN):
             selected_option = self.player_team_screen.optionsPlayer[self.player_team_screen.selectedPlayer]
+            
 
             if selected_option == "Front Office":
-                self.front_office = FrontOffice()
+                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName = self.load_game.load_selected_game()
+
+                self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
                 self.menu.state = GameState.FRONT_OFFICE
 
             elif selected_option == "Roster":
@@ -1303,7 +1454,6 @@ class GameStateManager:
                 away_team, home_team = self.player_team_screen.draw_schedule()
                 current_round = self.player_team_screen.current_round
                 
-                # Ensure you're passing all required arguments
                 self.play_game_screen = PlayGameScreen(
                     mlb_teamsNL,        # First argument
                     mlb_teamsAL,        # Second argument
@@ -1337,14 +1487,26 @@ class GameStateManager:
         if pyxel.btnp(pyxel.KEY_BACKSPACE):
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.bench
-            self.game = Game(self.batting_order, self.bench)
+            self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order,self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
+            self.game = Game(self.batting_order, self.opponent_batting_order, self.bench)
             self.menu.state = GameState.GAME
             
     def update_game(self):
         if pyxel.btnp(pyxel.KEY_SPACE):
             if not self.game.batter_turn_started or (self.game.strike < 3 and self.game.ball < 4):
                 self.game.batter_turn() 
+            if self.game.inning > 9 and self.game.home_score != self.game.away_score:
+                self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order)
+                self.menu.state = GameState.POST_GAME
+    
+    def update_post_game(self):
+        # Handle user input for restarting or quitting
+        if pyxel.btnp(pyxel.KEY_R):
+            # Restart the game
+            return 'restart'
+        if pyxel.btnp(pyxel.KEY_Q):
+            # Quit the game
+            pyxel.quit()
 
 game_state_manager = GameStateManager()
 
