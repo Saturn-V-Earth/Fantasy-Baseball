@@ -3,6 +3,8 @@ import mlbstatsapi
 import pickle
 import os
 import time
+import random
+import numpy as np
 
 global mlb
 
@@ -19,11 +21,15 @@ class GameState:
     PLAY_GAME_SCREEN = 7
     GAME = 8
     POST_GAME = 9
+    DIFFICULTY = 10
+    BUDGET = 11
         
 class Menu:
     def __init__(self):
         self.state = GameState.MENU
-        pyxel.init(160, 130, title="Fantasy Baseball")
+        self.length = 160
+        self.width = 130
+        pyxel.init(self.length, self.width, title="Fantasy Baseball")
         self.options = ["New Game", "Load Game", "Quit"]
         self.selected = 0
 
@@ -40,16 +46,26 @@ class Menu:
                 self.state = GameState.TEAM_SELECTION
             elif selected_option == "Load Game":
                 self.state = GameState.LOAD_GAME
+    
+    def draw_centered_text(self, x_center, y, text, color):
+        text_width = len(text) * pyxel.FONT_WIDTH  # pyxel.FONT_WIDTH is typically 4
+        x = x_center - (text_width // 2)
+        pyxel.text(x, y, text, color)
 
     def draw(self):
         pyxel.cls(12)
-        pyxel.text(50, 40, "Fantasy Baseball", 1)
+        title = "Fantasy Baseball"
+        
+        # Center the title
+        self.draw_centered_text(self.length // 2, 40, title, 1)
+        
+        # Center the options
         for i, option in enumerate(self.options):
             y = 60 + i * 10
             if i == self.selected:
-                pyxel.text(50, y, "> " + option, 0)
+                self.draw_centered_text(self.length // 2, y, "> " + option, 0)
             else:
-                pyxel.text(50, y, option, 7)
+                self.draw_centered_text(self.length // 2, y, option, 7)
 
 class TeamSelectionScreen:
     def __init__(self, mlb_teamsNL, mlb_teamsAL):
@@ -120,6 +136,7 @@ class loadGame:
         with open(selected_file, 'rb') as f:
             self.loaded_data = pickle.load(f)
         print(f"Loaded data from {selected_file}")
+
         self.teamID = self.loaded_data['teamID']
         self.selected_team = self.loaded_data['selected_team']
         self.coachFirstName = self.loaded_data['coachFirstName']
@@ -130,8 +147,16 @@ class loadGame:
         self.training_facilitys = self.loaded_data['training_facilitys']
         self.rehab_facilitys = self.loaded_data['rehab_facilitys']
 
+        self.round_num = self.loaded_data['round_num']
+
+        self.wins = self.loaded_data['wins']
+        self.losses = self.loaded_data['losses']
+
+        self.difficulty = self.loaded_data['difficulty']
+        self.revenue = self.loaded_data['revenue']
+
         self.state = GameState.FRONT_OFFICE
-        return self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName
+        return self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue
 
     def draw(self):
         pyxel.cls(12)
@@ -162,6 +187,11 @@ class CreateAccountScreen:
         self.current_input = "first_name"  # Track which input field is active
         self.createdAccount = False  # Track if the account has been created
 
+        self.round_num = 0
+
+        self.wins = 0
+        self.losses = 0
+
     def get_coachFirstName(self):
         return self.coachFirstName
 
@@ -171,6 +201,8 @@ class CreateAccountScreen:
     def get_CoachingCredits(self):
         return self.CoachingCredits
     
+    def get_round_num(self):
+        return self.round_num
 
     def get_stadium(self):
         return self.stadium
@@ -180,7 +212,12 @@ class CreateAccountScreen:
     
     def get_rehab_facilitys(self):
         return self.rehab_facilitys
-    
+
+    def get_wins(self):
+        return self.wins
+
+    def get_losses(self):
+        return self.losses
 
     def update(self):
         # Switch between input fields using the Tab key
@@ -245,7 +282,12 @@ class CreateAccountScreen:
             'CoachingCredits': self.CoachingCredits,
             'stadium': self.stadium,
             'training_facilitys': self.training_facilitys,
-            'rehab_facilitys': self.rehab_facilitys
+            'rehab_facilitys': self.rehab_facilitys,
+            'round_num': self.round_num,
+            'wins': self.wins,
+            'losses': self.losses,
+            'difficulty': None,
+            'revenue': None
         }
 
         filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
@@ -256,16 +298,21 @@ class CreateAccountScreen:
     def run(self):
         pyxel.run(self.update, self.draw)
 
-
 class PlayerTeamScreen:
-    def __init__(self, selected_team, teamID, schedule, coachingCredits):
+    def __init__(self, selected_team, teamID, schedule, coachingCredits, round_num, coachFirstName, coachLastName, wins, losses, difficulty, revenue):
+        self.difficulty = difficulty
+        self.revenue = revenue
+        self.wins = wins
+        self.losses = losses
+        self.coachFirstName = coachFirstName
+        self.coachLastName = coachLastName
         self.selected_team = selected_team
         self.teamID = teamID
         self.optionsPlayer = ["Play Game", "Front Office", "Roster", "Hall of Fame", "Advance Week", "Options"]
         self.CoachingCredits = coachingCredits
         self.selectedPlayer = 0
         self.schedule = schedule
-        self.current_round = 0
+        self.current_round = round_num
         self.home = None
         self.away = None
 
@@ -283,6 +330,7 @@ class PlayerTeamScreen:
                 self.current_round += 1
                 if self.current_round >= len(self.schedule):
                     self.current_round = len(self.schedule) - 1  # Ensure current_round stays valid
+                self.save_account()
 
                 # Check if the upcoming game involves a "BYE"
                 next_round_games = self.schedule[self.current_round]
@@ -294,16 +342,6 @@ class PlayerTeamScreen:
                             self.current_round = len(self.schedule) - 1  # Prevent out-of-bounds error
                         pyxel.text(10, 10, "Opponent is BYE. Advancing to next valid game.", 8)
                         return  # Skip further actions for this week
-
-                # Proceed to the PlayGameScreen, passing the required parameters
-                self.play_game_screen = PlayGameScreen(
-                    mlb_teamsNL,        # Add mlb_teamsNL as the first argument
-                    mlb_teamsAL,        # Add mlb_teamsAL as the second argument
-                    self.selected_team,  # Third argument
-                    self.teamID,        # Fourth argument (team_id)
-                    week=self.current_round  # Fifth argument (week)
-                )
-                self.state = GameState.PLAY_GAME_SCREEN
 
     def draw_schedule(self):
         pyxel.text(50, 90, "Season Schedule", 1)
@@ -364,6 +402,8 @@ class PlayerTeamScreen:
         pyxel.cls(12)
         pyxel.text(15, 10, f"Your Team: {self.selected_team}", 1)
         pyxel.text(15, 20, f"Coaching Credits: {self.CoachingCredits}", 1)
+        pyxel.text(15, 120, f"Wins: {self.wins}      Losses: {self.losses}", 1)
+
         self.draw_schedule()
         for i, option in enumerate(self.optionsPlayer):
             y = 30 + i * 10
@@ -371,6 +411,25 @@ class PlayerTeamScreen:
                 pyxel.text(30, y, "> " + option, 0)
             else:
                 pyxel.text(30, y, option, 7)
+
+    def save_account(self):
+        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
+        
+        # Check if file exists and load existing data
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                account_data = pickle.load(f)
+        else:
+            # If no file exists, create a new dictionary
+            account_data = {}
+
+        # Update the relevant fields in the loaded account data
+        account_data['round_num'] = self.current_round
+
+        # Write updated data back to the file
+        with open(filename, 'wb') as f:
+            pickle.dump(account_data, f)
+        print(f"Account saved to {filename}")
 
 class FrontOffice:
     def __init__(self, coachingCredits, stadium, training_facilities, rehab_facilities, coachFirstName, coachLastName):
@@ -486,6 +545,266 @@ class FrontOffice:
             else:
                 pyxel.text(x, 100, option, 7)
 
+class Budget:
+    def __init__(self, coachFirstName, coachLastName, revnue):
+        self.coachFirstName = coachFirstName
+        self.coachLastName = coachLastName
+        self.free_agents = []
+        self.staff = []
+        self.coaches = []
+        self.revenue = revnue
+        self.budget = 0
+        
+        # Add an instance of Difficulty
+        self.difficulty = Difficulty()
+        
+
+    def save_account(self):
+        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
+        
+        # Check if file exists and load existing data
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                account_data = pickle.load(f)
+        else:
+            # If no file exists, create a new dictionary
+            account_data = {}
+
+        # Update the relevant fields in the loaded account data
+        account_data['revenue'] = self.revenue
+        account_data['budget'] = self.budget
+
+        # Write updated data back to the file
+        with open(filename, 'wb') as f:
+            pickle.dump(account_data, f)
+        print(f"Account saved to {filename}")
+
+    def teamRevenue(self):
+        return self.revenue
+
+    def revenueSharing(self):
+        # Example: Assume a percentage of revenue is shared with the league
+        total_revenue = self.teamRevenue()
+        revenue_share_percentage = 0.10  # Assume 10% of revenue is shared
+        revenue_shared = total_revenue * revenue_share_percentage
+
+        return revenue_shared
+
+    def playerSalaries(self):
+        pass
+
+    def staffSalaries(self):
+        total_salary = sum(staff_member['salary'] for staff_member in self.staff)
+        return total_salary
+
+    def CompetitiveBalanceTax(self):
+        total_salary = self.playerSalaries() + self.staffSalaries()
+        if total_salary > self.salary_cap:
+            tax_rate = 0.20  # Assume 20% tax on over-the-cap amount
+            over_the_cap = total_salary - self.salary_cap
+            tax = over_the_cap * tax_rate
+        else:
+            tax = 0
+        return tax
+
+    def AvailableBudget(self):
+        total_revenue = self.teamRevenue()
+        total_salaries = self.playerSalaries() + self.staffSalaries()
+        tax = self.CompetitiveBalanceTax()
+        
+        available_budget = total_revenue - total_salaries - tax
+        return available_budget
+
+    def draw(self):
+        pass
+
+class Difficulty:
+    def __init__(self, coachFirstName, coachLastName):
+        self.coachFirstName = coachFirstName
+        self.coachLastName = coachLastName
+        self.optionsDifficulty = ['Easy', 'Medium', 'Hard']
+        self.selected_difficulty = 0
+        self.revenue = 0  # This will store the calculated budget for the selected difficulty
+        # Define the mean and standard deviation for revenue budget
+        self.mean = 218.9
+        self.std_dev = 38.75766
+        self.length = 160
+        self.width = 130
+        
+    def save_account(self):
+        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
+        
+        # Check if file exists and load existing data
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                account_data = pickle.load(f)
+        else:
+            # If no file exists, create a new dictionary
+            account_data = {}
+
+        # Update the relevant fields in the loaded account data
+        account_data['difficulty'] = self.optionsDifficulty[self.selected_difficulty]
+        account_data['revenue'] = self.revenue
+
+        # Write updated data back to the file
+        with open(filename, 'wb') as f:
+            pickle.dump(account_data, f)
+        print(f"Account saved to {filename}")
+    
+    def update(self):
+        if pyxel.btnp(pyxel.KEY_DOWN):
+            self.selected_difficulty = (self.selected_difficulty + 1) % len(self.optionsDifficulty)
+        if pyxel.btnp(pyxel.KEY_UP):
+            self.selected_difficulty = (self.selected_difficulty - 1) % len(self.optionsDifficulty)
+        if pyxel.btnp(pyxel.KEY_RETURN):
+            selectedOption = self.optionsDifficulty[self.selected_difficulty]
+
+
+            if selectedOption == 'Easy':
+                self.revenue = min(self.mean + self.std_dev, np.random.normal(self.mean + self.std_dev, self.std_dev * 0.2))
+
+            elif selectedOption == 'Medium':
+                self.revenue = np.random.normal(self.mean, self.std_dev * 0.5)
+
+            elif selectedOption == 'Hard':
+                self.revenue = max(self.mean - self.std_dev, np.random.normal(self.mean - self.std_dev, self.std_dev * 0.2))
+
+
+            # Ensure the budget is within a realistic range
+            self.revenue = max(50, min(self.revenue, 350))  # Example limits to keep values reasonable
+            
+            self.revenue = round(self.revenue, 2)  # Round to 2 decimal places
+
+            self.save_account()
+
+    def draw_centered_text(self, x_center, y, text, color):
+        text_width = len(text) * pyxel.FONT_WIDTH  # pyxel.FONT_WIDTH is typically 4
+        x = x_center - (text_width // 2)
+        pyxel.text(x, y, text, color)
+
+    def draw(self):
+        pyxel.cls(12)
+        title = "Difficulty"
+        
+        # Center the title
+        self.draw_centered_text(self.length // 2, 40, title, 1)
+        
+        # Center the options
+        for i, option in enumerate(self.optionsDifficulty):
+            y = 60 + i * 10
+            if i == self.selected_difficulty:
+                self.draw_centered_text(self.length // 2, y, "> " + option, 0)
+            else:
+                self.draw_centered_text(self.length // 2, y, option, 7)
+
+class FreeAgents:
+    def __init__(self):
+        self.positions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH']
+        self.free_agents = self.generate_free_agents()
+
+    def generate_free_agents(self):
+        free_agents = []
+
+        # One low-level free agent
+        free_agents.append(self.generate_free_agent('low'))
+
+        # Three mid-level free agents
+        for _ in range(3):
+            free_agents.append(self.generate_free_agent('mid'))
+
+        # One high-level free agent
+        free_agents.append(self.generate_free_agent('high'))
+
+        return free_agents
+
+    def generate_free_agent(self, level):
+        # Randomize position
+        position = random.choice(self.positions)
+
+        # Assign stats based on the level
+        if position == 'P':  # Pitcher (ERA)
+            if level == 'low':
+                era = random.uniform(4.50, 5.50)
+            elif level == 'mid':
+                era = random.uniform(3.00, 4.00)
+            else:  # high
+                era = random.uniform(2.00, 2.50)
+            ba, fa = None, random.uniform(0.950, 0.990)
+
+        else:  # Non-pitcher (BA and FA)
+            if level == 'low':
+                ba = random.uniform(0.200, 0.240)
+            elif level == 'mid':
+                ba = random.uniform(0.240, 0.280)
+            else:  # high
+                ba = random.uniform(0.280, 0.330)
+            era, fa = None, random.uniform(0.950, 0.990)
+
+        # Calculate star ratings
+        ba_stars, fa_stars, era_stars = self.calculate_star_rating(ba, fa, era)
+
+        # Calculate salary
+        salary = self.calculate_salary(ba_stars, fa_stars, era_stars)
+
+        # Return the free agent's details
+        return {
+            'position': position,
+            'batting_average': ba,
+            'fielding_average': fa,
+            'earned_run_average': era,
+            'ba_stars': ba_stars,
+            'fa_stars': fa_stars,
+            'era_stars': era_stars,
+            'salary': salary
+        }
+
+    def calculate_star_rating(self, ba=None, fa=None, era=None):
+        ba_min, ba_max = 0.200, 0.300
+        fa_min, fa_max = 0.950, 0.990
+        era_min, era_max = 2.00, 5.00
+
+        if ba is not None:
+            normalized_ba = self.normalize_stat(ba, ba_min, ba_max)
+            ba_stars = self.stat_to_stars(normalized_ba)
+        else:
+            ba_stars = None
+
+        normalized_fa = self.normalize_stat(fa, fa_min, fa_max)
+        fa_stars = self.stat_to_stars(normalized_fa)
+
+        if era is not None:
+            normalized_era = self.normalize_stat(era, era_min, era_max, invert=True)
+            era_stars = self.stat_to_stars(normalized_era)
+        else:
+            era_stars = None
+
+        return ba_stars, fa_stars, era_stars
+
+    def normalize_stat(self, stat, min_stat, max_stat, invert=False):
+        if stat is None:
+            return None
+        normalized = (stat - min_stat) / (max_stat - min_stat)
+        if invert:
+            normalized = 1 - normalized
+        return max(0, min(1, normalized))
+
+    def stat_to_stars(self, normalized_score):
+        if normalized_score is None:
+            return None
+        return round(normalized_score * 10) / 2
+
+    def calculate_salary(self, ba_stars, fa_stars, era_stars):
+        base_salary = 800000  # Base salary in dollars
+        star_bonus = 1500000  # Bonus per star in dollars
+        total_stars = (ba_stars or 0) + (fa_stars or 0) + (era_stars or 0)
+        return base_salary + (total_stars * star_bonus)
+
+    def display_free_agents(self):
+        for agent in self.free_agents:
+            print(f"Position: {agent['position']}, BA: {agent['batting_average']}, FA: {agent['fielding_average']}, "
+                  f"ERA: {agent['earned_run_average']}, BA Stars: {agent['ba_stars']}, FA Stars: {agent['fa_stars']}, "
+                  f"ERA Stars: {agent['era_stars']}, Salary: ${agent['salary']:,.2f}")
+            
 class RosterScreen:
     def __init__(self, selected_team, teamID):
         self.selected_team = selected_team
@@ -571,8 +890,8 @@ class RosterScreen:
         return None, None, None
 
     def calculate_salary(self, ba_stars, fa_stars, era_stars):
-        base_salary = 500000  # Base salary in dollars
-        star_bonus = 2000000  # Bonus per star in dollars
+        base_salary = 800000  # Base salary in dollars
+        star_bonus = 1500000  # Bonus per star in dollars
 
         total_stars = (ba_stars or 0) + (era_stars or 0)
         salary = base_salary + (total_stars * star_bonus)
@@ -634,32 +953,38 @@ class RosterScreen:
 
                 batter_avg = None
                 try: 
-                    batter_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['hitting'], season=2023)
+                    batter_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['hitting'], season=2024)
                     season_stats = batter_stats['hitting']['season']
                     for split in season_stats.splits:
                         batter_avg = float('0' + split.stat.avg)
                         break
                 except KeyError:
                     pass
+                except TypeError:
+                    pass
                 
                 era = None
                 try:
-                    pitcher_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['pitching'], season=2023)
+                    pitcher_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['pitching'], season=2024)
                     season_stats = pitcher_stats['pitching']['season']
                     for split in season_stats.splits:
                         era = float(split.stat.era)
                         break
                 except KeyError:
                     pass
+                except TypeError:
+                    pass
 
                 fielding_avg = None
                 try:
-                    fielding_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['fielding'], season=2023)
+                    fielding_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['fielding'], season=2024)
                     season_stats = fielding_stats['fielding']['season']
                     for split in season_stats.splits:
                         fielding_avg = float('0' + split.stat.fielding) if split.stat.fielding != '1.000' else 1.0
                         break
                 except KeyError:
+                    pass
+                except TypeError:
                     pass
                 
                 print(f"Player: {player_info.fullname}, BA: {batter_avg}, ERA: {era}, FA: {fielding_avg}")
@@ -686,12 +1011,12 @@ class RosterScreen:
             print("Saved roster to file")
             return self.players, self.BA, self.Fld, self.star_ratings, self.salaries
         
-class Schedule():
-    def __init__(self, mlb_teamsNL, mlb_teamsAL, selected_team, current_round):
+class Schedule:
+    def __init__(self, mlb_teamsNL, mlb_teamsAL, selected_team, round_num):
         self.mlb_teamsNL = mlb_teamsNL
         self.mlb_teamsAL = mlb_teamsAL
         self.selected_team = selected_team
-        self.week = current_round
+        self.week = round_num
         
         # Determine if the selected team is from NL or AL
         if selected_team in self.mlb_teamsNL:
@@ -732,7 +1057,7 @@ class Schedule():
         if self.week >= len(self.schedule):
             return None  # Invalid week
 
-        for home, away in self.schedule[self.week]:
+        for home, away in self.schedule[self.week - 1]:
             if home == self.selected_team:
                 return away
             if away == self.selected_team:
@@ -790,6 +1115,8 @@ class PlayGameScreen(Schedule):
 
         self.assign_positions()  # Assign players to field and bench
 
+    def get_opponent_ID(self):
+        return self.opponent_team_id
 
     def load_opponent_team(self):
         # Access the schedule for the current week (round)
@@ -939,115 +1266,108 @@ class PlayGameScreen(Schedule):
             text = f"\n{player['fullname']} ({position})"
             pyxel.text(10, 110, text, 7)
 
-
 class DeckShuffler:
-    def __init__(self, deck=None):
-        # Initialize the random seed based on the current time in milliseconds
+    def __init__(self, deck=None, batting_avarage=0.250 ,star_rating=4):
         self.seed = int(time.time() * 1000)
-        # If a custom deck is provided, use it; otherwise, create a default deck
-        self.deck = deck if deck is not None else self.create_default_deck()
+        self.star_rating = star_rating
+        self.batting_avarage = batting_avarage
+        self.deck = deck if deck is not None else self.create_weighted_deck()
+
+    def create_weighted_deck(self):
+        print("created new deck with batting avarge", self.batting_avarage)
+        deck = []
+        
+        # Adjust weights based on player stats
+        hit_weight = self.batting_avarage * 10
+        out_weight = (1 - self.batting_avarage) * 10
+
+        # Hit cards
+        deck.extend(["single"] * int(hit_weight * 2))
+        deck.extend(["double"] * int(hit_weight * 1.5))
+        deck.extend(["triple"] * int(hit_weight * 0.5))
+        deck.extend(["home_run"] * int(hit_weight * 0.2))
+
+        # Out cards
+        deck.extend(["strike"] * int(out_weight * 5))
+        deck.extend(["fly_out"] * int(out_weight * 2))
+        deck.extend(["ground_out"] * int(out_weight * 2))
+
+        # Other cards
+        deck.extend(["ball"] * 10)
+        deck.extend(["foul_ball"] * 2)
+        deck.extend(["hit_by_pitcher"] * 1)
+        """
+        deck.extend(["stolen_base"] * 1)
+        """
+
+        # Modify for star rating
+        if self.star_rating >= 4:
+            deck.extend(["home_run"] * 2)
+            deck.extend(["double"] * 3)
+
+        self.deck = deck
+        return self.deck
 
     def custom_random_number(self, min_value, max_value):
-        # Update the seed using a linear congruential generator (LCG) formula
         self.seed = (self.seed * 1103515245 + 12345) & 0x7FFFFFFF
-        # Generate a random number within the given range [min_value, max_value]
         random_value = self.seed % (max_value - min_value + 1)
         return min_value + random_value
 
     def riffle_shuffle(self):
-        # If the deck has 1 or fewer cards, return it as-is (nothing to shuffle)
         if len(self.deck) <= 1:
             return self.deck
 
-        # Split the deck at a random point
         split_point = self.custom_random_number(1, len(self.deck) - 1)
         left_half = self.deck[:split_point]
         right_half = self.deck[split_point:]
 
         shuffled_deck = []
-
-        # Simulate the riffle shuffle by interleaving the two halves
         while left_half or right_half:
             if left_half and right_half:
-                # Randomly choose to take from the left or right half
                 if self.custom_random_number(0, 1) == 0:
                     shuffled_deck.append(left_half.pop(0))
                 else:
                     shuffled_deck.append(right_half.pop(0))
             elif left_half:
-                # If only the left half remains, add the remaining cards to the shuffled deck
                 shuffled_deck.append(left_half.pop(0))
             elif right_half:
-                # If only the right half remains, add the remaining cards to the shuffled deck
                 shuffled_deck.append(right_half.pop(0))
 
-        # Update the deck with the shuffled deck
         self.deck = shuffled_deck
         return self.deck
 
     def overhand_shuffle(self):
         shuffled_deck = []
         while self.deck:
-            # Randomly determine how many cards to take from the top of the deck (1 to 5)
             num_cards = self.custom_random_number(1, min(5, len(self.deck)))
-            # Move the selected cards to the front of the shuffled deck
             shuffled_deck = self.deck[:num_cards] + shuffled_deck
-            # Remove the selected cards from the original deck
             self.deck = self.deck[num_cards:]
-        # Update the deck with the shuffled deck
         self.deck = shuffled_deck
         return self.deck
 
     def smoosh_shuffle(self):
-        # Randomly swap each card in the deck with another card
         for i in range(len(self.deck)):
             j = self.custom_random_number(0, len(self.deck) - 1)
             self.deck[i], self.deck[j] = self.deck[j], self.deck[i]
         return self.deck
 
     def mega_shuffle(self):
-        # List of shuffle methods to apply
-        self.deck = self.create_default_deck()
         shuffle_funcs = [self.riffle_shuffle, self.overhand_shuffle, self.smoosh_shuffle]
-        for _ in range(3):  # Repeat the shuffling process three times
-            # Randomly shuffle the list of shuffle functions and apply them in that order
+        for _ in range(3):
             for shuffle in sorted(shuffle_funcs, key=lambda _: self.custom_random_number(0, 2)):
                 shuffle()
         return self.deck
 
-    def create_default_deck(self):
-        # Create a default deck with predefined cards
-        deck = []
-        deck.extend(["ball"] * 10)
-        deck.extend(["strike"] * 10)
-        deck.extend(["fly_out"] * 2)
-        deck.extend(["foul_ball"] * 2)
-        deck.extend(["out_double_play_first"] * 1)
-        deck.extend(["out_double_play_second"] * 1)
-        deck.extend(["foul_out"] * 1)
-        deck.extend(["hit_by_pitcher"] * 1)
-        deck.extend(["stolen_base"] * 1)
-        deck.extend(["balk"] * 1)
-        deck.extend(["home_run"] * 1)
-        deck.extend(["triple"] * 1)
-        deck.extend(["double"] * 2)
-        deck.extend(["single"] * 2)
-        # Set the deck to the newly created deck
-        self.deck = deck
-        return self.deck
-
-    def get_deck(self):
-        # Return the current state of the deck
-        return self.deck
-
     def shuffle_and_get_deck(self):
-        # Shuffle the deck using mega_shuffle and return the shuffled deck
         return self.mega_shuffle()
 
 class Game:
-    def __init__(self, batting_order, opponent_batting_order, bench):
+    def __init__(self, batting_order, opponent_batting_order, bench, teamID, opponent_team_id):
         # Initialize game state variables
         pyxel.images[0].load(0, 0, "istockphoto-667849798-612x612 (3).jpg")
+        pyxel.images[1].load(0, 0, "PXL_20241013_152554353.MP~3 (2).jpg")
+        self.power_bar = SlidingBar(105, 5, 50, 10, direction='horizontal')
+        self.angle_bar = SlidingBar(145, 20, 10, 50, direction='vertical')
         self.batting_order = batting_order
         self.opponent_batting_order = opponent_batting_order
         self.bench = bench
@@ -1056,15 +1376,26 @@ class Game:
         self.outs = 0
         self.home_score = 0
         self.away_score = 0
-        self.current_batter_index = 0
+
+        self.current_batter_index = 1
+        self.opponent_current_batter_index = 1
+
         self.field = [None, None, None]  # Represents bases (first, second, third)
         self.difficulty = 'easy'
         self.batter_turn_started = False  # Flag to indicate if the batter's turn has started
         self.strike = 0
         self.ball = 0
- 
-        # Initialize the deck using the DeckShuffler class
-        self.deck_shuffler = DeckShuffler()
+
+        self.teamID = teamID
+        self.opponent_team_id = opponent_team_id
+        
+        self.players = []
+        self.BA = []
+        self.Fld = []
+        self.star_ratings = []
+        self.salaries = []
+        self.roster = self.get_or_load_roster()
+
         self.new_deck()
 
         # Define the coordinates for displaying scores and other information
@@ -1079,12 +1410,58 @@ class Game:
             'batter': (10, 110)  # Coordinates for the current batter display
         }
 
+    def get_or_load_roster(self):
+        if self.inning % 2 == 1:
+            teamID = self.teamID
+        else:
+            teamID = self.opponent_team_id
+        filename = f"team_{teamID}_roster.pkl"
+        if os.path.exists(filename):
+            with open(filename, "rb") as f:
+                data = pickle.load(f)
+            print("Loaded roster from file")
+            self.players = data['players']
+            self.BA = data['BA']  # Batting averages
+            self.Fld = data['Fld']
+            self.star_ratings = data['star_ratings']
+            self.salaries = data['salaries']
+            return self.players, self.BA, self.Fld, self.star_ratings, self.salaries
+
+    def get_current_batter_stats(self):
+        # Get the current batter's name
+        current_batter = self.batting_order[self.current_batter_index - 1]['fullname'] if self.inning % 2 == 1 else self.opponent_batting_order[self.opponent_current_batter_index - 1]['fullname']
+        self.get_or_load_roster()
+        current_batter = current_batter.strip()
+
+        # Find the index of the current batter in self.players
+        index = None
+        for idx, player in enumerate(self.players):
+            player_name = player['fullname'].strip()
+            if player_name.lower() == current_batter.lower():
+                index = idx
+                break
+
+        if index is not None:
+            # Use the index to find the batting average from self.BA
+            batting_average = self.BA[index]
+            return batting_average
+        else:
+            return None
+
     def new_deck(self):
-        # Shuffle and assign a new deck
-        self.deck = self.deck_shuffler.shuffle_and_get_deck()
+        batting_average = self.get_current_batter_stats()
+        if batting_average is None:
+            batting_average = 0.250  # Default batting average if not found
+        # Pass the retrieved batting average to DeckShuffler
+        deck_shuffler = DeckShuffler(batting_avarage=batting_average)
+        # Shuffle the deck and get the result
+        self.deck = deck_shuffler.shuffle_and_get_deck()
+        return self.deck
 
     def start_inning(self):
         # Start a new inning by resetting outs and incrementing the inning count
+        self.strike = 0
+        self.ball = 0
         self.inning += 1
         self.outs = 0
         self.field = [None, None, None]  # Clear the bases for a new inning
@@ -1131,6 +1508,8 @@ class Game:
             self.advance_runners(1, hit=False)
         elif self.current_card == "fly_out":
             self.handle_out()
+        elif self.current_card == "ground_out":
+            self.handle_out()
         elif self.current_card == "foul_out":
             self.handle_out()
         elif self.current_card == "out_double_play_first":
@@ -1141,7 +1520,10 @@ class Game:
             self.out_at_third()
         
     def next_batter(self):
-        self.current_batter_index = (self.current_batter_index + 1) % 9
+        if self.inning % 2 == 1:
+            self.current_batter_index = (self.current_batter_index + 1) % 9
+        else:
+            self.opponent_current_batter_index = (self.opponent_current_batter_index + 1) % 9
         self.strike = 0
         self.ball = 0
         self.new_deck()
@@ -1169,6 +1551,7 @@ class Game:
 
     def advance_runners(self, bases, hit):
         # Advance the runners on the field based on the number of bases moved
+        current_batter = self.batting_order[self.current_batter_index - 1]['fullname'] if self.inning % 2 == 1 else self.opponent_batting_order[self.opponent_current_batter_index - 1]['fullname']
         if bases == 4:  # Home run, clear the bases
             for i in range(3):
                 if self.field[i] is not None:
@@ -1253,6 +1636,9 @@ class Game:
         # Clear the screen and draw the background and game elements
         pyxel.cls(5)
         pyxel.blt(0, 0, 0, 0, 0, 160, 120)  # Draw the background image
+
+        self.power_bar.draw()
+        self.angle_bar.draw()
         
         # Draw the inning, outs, and scores
         pyxel.text(self.score_coords['home'][0], self.score_coords['home'][1], f"Home: {self.home_score}", 7)
@@ -1270,29 +1656,40 @@ class Game:
         for i, pos in enumerate(positions):
             if self.field[i] == "batter":
                 x, y = self.get_base_coords(pos)
-                pyxel.text(x, y, "Batter", 8)
+                pyxel.text(x, y, "RUNNER", 8)
         
         # Display the current card
         if self.current_card:
             pyxel.text(self.score_coords['card'][0], self.score_coords['card'][1], f"Card: {self.current_card}", 7)
+            #pyxel.blt(0, 0, 1, 0, 0, 70, 103)  
 
         # Display the current batter
         if self.inning % 2 == 1:
-            current_batter = str({self.batting_order[self.current_batter_index]['fullname']})
+            current_batter = str({self.batting_order[self.current_batter_index - 1]['fullname']})
             current_batter = current_batter.translate({ord("'"): None})
             current_batter = current_batter.translate({ord("{"): None})
             current_batter = current_batter.translate({ord("}"): None})
+            if self.current_batter_index == 0:
+                self.current_batter_index = 9
+            pyxel.text(self.score_coords['batter'][0], self.score_coords['batter'][1], f"{self.current_batter_index}. Batter: {current_batter}", 7)
         else:
-            current_batter = str({self.opponent_batting_order[self.current_batter_index]['fullname']})
+            current_batter = str({self.opponent_batting_order[self.opponent_current_batter_index - 1]['fullname']})
             current_batter = current_batter.translate({ord("'"): None})
             current_batter = current_batter.translate({ord("{"): None})
             current_batter = current_batter.translate({ord("}"): None})
-        pyxel.text(self.score_coords['batter'][0], self.score_coords['batter'][1], f"Batter: {current_batter}", 7)
+            if self.opponent_current_batter_index == 0:
+                self.opponent_current_batter_index = 9
+            pyxel.text(self.score_coords['batter'][0], self.score_coords['batter'][1], f"{self.opponent_current_batter_index}. Batter: {current_batter}", 7)
 
 class PostGameScreen:
-    def __init__(self, home_score, away_score, batting_order, opponent_batting_order):
+    def __init__(self, home_score, away_score, batting_order, opponent_batting_order, wins, losses, coachFirstName, coachLastName, round_num):
+        self.round_num = round_num
+        self.coachFirstName = coachFirstName
+        self.coachLastName = coachLastName
         self.home_score = home_score
         self.away_score = away_score
+        self.wins = wins
+        self.losses = losses
         self.batting_order = batting_order
         self.opponent_batting_order = opponent_batting_order
         self.winner = "Home" if home_score > away_score else "Away" if away_score > home_score else "Tie"
@@ -1305,9 +1702,25 @@ class PostGameScreen:
             'winner': (60, 90)
         }
 
+        self.win_loss()
+
+    def win_loss(self):
+        if self.winner == "Home":
+            self.wins += 1
+            self.losses = self.losses
+            self.round_num += 1
+            self.save_account()
+        elif self.winner == "Away":
+            self.losses += 1
+            self.wins = self.wins
+            self.round_num += 1
+            self.save_account()
+        else:
+            pass
+
     def draw(self):
         # Clear the screen for the post-game view
-        pyxel.cls(0)
+        pyxel.cls(5)
 
         # Display the final scores
         pyxel.text(self.score_coords['home'][0], self.score_coords['home'][1], f"Home: {self.home_score}", 7)
@@ -1318,6 +1731,96 @@ class PostGameScreen:
 
         # Optionally display some player statistics
         pyxel.text(10, 120, "Press R to restart or Q to quit", 7)
+
+    def save_account(self):
+        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
+        
+        # Check if file exists and load existing data
+        if os.path.exists(filename):
+            with open(filename, 'rb') as f:
+                account_data = pickle.load(f)
+        else:
+            # If no file exists, create a new dictionary
+            account_data = {}
+
+        # Update the relevant fields in the loaded account data
+        account_data['wins'] = self.wins
+        account_data['losses'] = self.losses
+        account_data['round_num'] = self.round_num
+
+        # Write updated data back to the file
+        with open(filename, 'wb') as f:
+            pickle.dump(account_data, f)
+        print(f"Account saved to {filename}")
+
+class SlidingBar:
+    def __init__(self, x, y, width, height, direction='horizontal', min_value=0, max_value=100, gradient_colors=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.direction = direction
+        self.min_value = min_value
+        self.max_value = max_value
+        self.value = min_value
+        self.moving_forward = True 
+        self.horistopped = False
+        self.vertstopped = False
+        
+        # Use provided gradient colors or default gradient colors
+        if gradient_colors is None:
+            self.gradient_colors = [7, 15, 10, 9, 8, 9, 10, 15, 7]
+        else:
+            self.gradient_colors = gradient_colors
+
+    def update(self):
+        if not self.horistopped:
+            if self.direction == 'horizontal':
+                if self.moving_forward:
+                    self.value += 2
+                    if self.value >= self.max_value:
+                        self.moving_forward = False
+                else:
+                    self.value -= 2
+                    if self.value <= self.min_value:
+                        self.moving_forward = True
+        if not self.vertstopped:
+            if self.direction == 'vertical':
+                if self.moving_forward:
+                    self.value += 2
+                    if self.value >= self.max_value:
+                        self.moving_forward = False
+                else:
+                    self.value -= 2
+                    if self.value <= self.min_value:
+                        self.moving_forward = True
+
+        # Stop the bar movement when the "A" button (assumed to be pyxel.KEY_A) is pressed
+        if pyxel.btnp(pyxel.KEY_P):
+            self.horistopped = True
+        
+        if pyxel.btnp(pyxel.KEY_A):
+            self.vertstopped = True
+        
+    def draw_gradient_rect(self, x, y, width, height, colors, direction='horizontal'):
+        num_colors = len(colors)
+        for i in range(width if direction == 'horizontal' else height):
+            color_index = i * (num_colors) // (width if direction == 'horizontal' else height)
+            color = colors[color_index]
+            if direction == 'horizontal':
+                pyxel.line(x + i, y, x + i, y + height, color)
+            else:
+                pyxel.line(x, y + i, x + width, y + i, color)
+
+    def draw(self):
+        if self.direction == 'horizontal':
+            self.draw_gradient_rect(self.x, self.y, self.width, self.height, self.gradient_colors, 'horizontal')
+            slider_position = self.x + (self.value - self.min_value) * self.width // (self.max_value - self.min_value)
+            pyxel.rect(slider_position - 2, self.y, 4, self.height, 1)
+        elif self.direction == 'vertical':
+            self.draw_gradient_rect(self.x, self.y, self.width, self.height, self.gradient_colors, 'vertical')
+            slider_position = self.y + (self.value - self.min_value) * self.height // (self.max_value - self.min_value)
+            pyxel.rect(self.x, slider_position - 2, self.width, 4, 1)
         
 # Define MLB teams
 mlb_teamsNL = [
@@ -1349,6 +1852,8 @@ class GameStateManager:
         self.player_team_screen = None
         self.game = None
         self.post_game_screen = None
+        self.difficulty_screen = None
+        self.budget_screen = None
 
     def update(self):
         if self.menu.state == GameState.MENU:
@@ -1359,8 +1864,18 @@ class GameStateManager:
             self.update_load_game()
         elif self.menu.state == GameState.CREATE_ACCOUNT:
             self.update_create_account()
+
+        elif self.menu.state == GameState.DIFFICULTY:
+            self.update_difficulty_screen()
+
         elif self.menu.state == GameState.PLAYER_TEAM_SCREEN:
             self.update_player_team_screen()
+
+            """
+        elif self.menu.state == GameState.BUDGET:
+            self.update_budget_screen()
+            """
+
         elif self.menu.state == GameState.ROSTER_SCREEN:
             self.update_roster_screen()
         elif self.menu.state == GameState.FRONT_OFFICE:
@@ -1379,10 +1894,20 @@ class GameStateManager:
             self.team_selection_screen.draw()
         elif self.menu.state == GameState.CREATE_ACCOUNT:
             self.create_account_screen.draw()
+
+        elif self.menu.state == GameState.DIFFICULTY:
+            self.difficulty_screen.draw()
+
         elif self.menu.state == GameState.LOAD_GAME:
             self.load_game.draw()
         elif self.menu.state == GameState.PLAYER_TEAM_SCREEN:
             self.player_team_screen.draw()
+
+            """
+        elif self.menu.state == GameState.BUDGET:
+            self.budget_screen.draw()
+            """
+
         elif self.menu.state == GameState.ROSTER_SCREEN and self.roster_screen:
             self.roster_screen.draw()
         elif self.menu.state == GameState.FRONT_OFFICE and self.front_office:
@@ -1403,17 +1928,11 @@ class GameStateManager:
     def update_load_game(self):
         self.load_game.update()
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName = self.load_game.load_selected_game()
+            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
 
-            # Check if player_team_screen is initialized
-            if self.player_team_screen is not None:
-                current_round = self.player_team_screen.current_round
-            else:
-                current_round = 0  # Default to 0 or some appropriate fallback
-
-            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, current_round)
+            schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, self.round_num)
             self.schedule = schedule_.get_schedule()
-            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits)
+            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue)
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
 
     def update_create_account(self):
@@ -1421,6 +1940,34 @@ class GameStateManager:
         if self.create_account_screen.createdAccount:
             # Check if player_team_screen is initialized
 
+            self.CoachingCredits = self.create_account_screen.CoachingCredits
+            self.round_num = self.create_account_screen.round_num
+            self.coachFirstName = self.create_account_screen.coachFirstName
+            self.coachLastName = self.create_account_screen.coachLastName
+            self.wins = self.create_account_screen.wins
+            self.losses = self.create_account_screen.losses
+
+            self.difficulty_screen = Difficulty(self.coachFirstName, self.coachLastName)
+            self.menu.state = GameState.DIFFICULTY
+
+    def update_difficulty_screen(self):
+        self.difficulty_screen.update()
+        if pyxel.btnp(pyxel.KEY_RETURN):
+            selected_option = self.difficulty_screen.optionsDifficulty[self.difficulty_screen.selected_difficulty]
+
+            if selected_option == "Easy":
+                self.difficulty = "Easy"
+            elif selected_option == "Medium":
+                self.difficulty = "Medium"
+            elif selected_option == "Hard":
+                self.difficulty = "Hard"
+
+            self.revenue = self.difficulty_screen.revenue
+
+            self.teamID, self.selected_team, = self.create_account_screen.selected_team, self.create_account_screen.teamID
+
+            print(self.selected_team, self.teamID)
+
             if self.player_team_screen is not None:
                 current_round = self.player_team_screen.current_round
             else:
@@ -1428,7 +1975,7 @@ class GameStateManager:
 
             schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, current_round)
             self.schedule = schedule_.get_schedule()
-            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits)
+            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue)
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
 
     def update_player_team_screen(self):
@@ -1437,9 +1984,8 @@ class GameStateManager:
         if pyxel.btnp(pyxel.KEY_RETURN):
             selected_option = self.player_team_screen.optionsPlayer[self.player_team_screen.selectedPlayer]
             
-
             if selected_option == "Front Office":
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName = self.load_game.load_selected_game()
+                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
 
                 self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
                 self.menu.state = GameState.FRONT_OFFICE
@@ -1450,24 +1996,17 @@ class GameStateManager:
                 self.menu.state = GameState.ROSTER_SCREEN
 
             elif selected_option == "Play Game":
-                # Fetch the current game from the schedule
-                away_team, home_team = self.player_team_screen.draw_schedule()
-                current_round = self.player_team_screen.current_round
-                
+                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
+
                 self.play_game_screen = PlayGameScreen(
                     mlb_teamsNL,        # First argument
                     mlb_teamsAL,        # Second argument
                     self.selected_team,  # Third argument
                     self.teamID,        # Fourth argument (team_id)
-                    current_round       # Fifth argument (week)
+                    self.round_num       # Fifth argument (week)
                 )
 
-                # Check if the opponent is "BYE"
-                if away_team == "BYE" or home_team == "BYE":
-                    pyxel.text(10, 10, "Cannot play game with BYE team. Please advance the week.", 8)
-                else:
-                    # Proceed to Play Game if it's not a BYE week
-                    self.menu.state = GameState.PLAY_GAME_SCREEN
+                self.menu.state = GameState.PLAY_GAME_SCREEN
 
     def update_roster_screen(self):
         if self.roster_screen:
@@ -1480,32 +2019,39 @@ class GameStateManager:
             self.front_office.update()
         if pyxel.btnp(pyxel.KEY_BACKSPACE):
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
-
+ 
     def update_play_game_screen(self):
         if self.play_game_screen:
             self.play_game_screen.update()
         if pyxel.btnp(pyxel.KEY_BACKSPACE):
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order,self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
-            self.game = Game(self.batting_order, self.opponent_batting_order, self.bench)
+            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
+            self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
+            self.opponent_team_id = self.play_game_screen.opponent_team_id
+            self.game = Game(self.batting_order, self.opponent_batting_order, self.bench, self.teamID, self.opponent_team_id)
             self.menu.state = GameState.GAME
             
     def update_game(self):
+        self.game.power_bar.update()
+        self.game.angle_bar.update()
         if pyxel.btnp(pyxel.KEY_SPACE):
+            self.game.power_bar.update()
+            self.game.angle_bar.update()
             if not self.game.batter_turn_started or (self.game.strike < 3 and self.game.ball < 4):
                 self.game.batter_turn() 
             if self.game.inning > 9 and self.game.home_score != self.game.away_score:
-                self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order)
+                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
+                self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
+                self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order, self.wins, self.losses, self.coachFirstName, self.coachLastName, self.round_num)
                 self.menu.state = GameState.POST_GAME
     
     def update_post_game(self):
-        # Handle user input for restarting or quitting
-        if pyxel.btnp(pyxel.KEY_R):
-            # Restart the game
-            return 'restart'
+        if pyxel.btnp(pyxel.KEY_RETURN):
+            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue = self.load_game.load_selected_game()
+            self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue)
+            self.menu.state = GameState.PLAYER_TEAM_SCREEN
         if pyxel.btnp(pyxel.KEY_Q):
-            # Quit the game
             pyxel.quit()
 
 game_state_manager = GameStateManager()
