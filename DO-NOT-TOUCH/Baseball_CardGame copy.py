@@ -24,7 +24,6 @@ class GameState:
     DIFFICULTY = 10
     BUDGET = 11
     VIEW_ROSTER = 12
-    FREE_AGENTS = 13
         
 class Menu:
     def __init__(self):
@@ -116,20 +115,14 @@ class TeamSelectionScreen:
             else:
                 pyxel.text(10 if self.selected_section == "American League" else 10, y, team, 7)
 
-class loadGame():
+class loadGame:
     def __init__(self):
-        self.saved_games = []
+        self.saved_games = self.get_saved_games()
         self.selected_index = 0
         self.loaded_data = None
-        self.refresh_saved_games_list()
 
-    def refresh_saved_games_list(self):
-        # Refreshes the saved game list dynamically
-        self.saved_games = sorted(
-            [f for f in os.listdir() if f.endswith('_account.pkl')],
-            key=lambda x: os.path.getmtime(x),
-            reverse=True
-        )
+    def get_saved_games(self):
+        return [f for f in os.listdir() if f.endswith('_account.pkl')]
     
     def update(self):
         if pyxel.btnp(pyxel.KEY_UP):
@@ -140,8 +133,6 @@ class loadGame():
             self.load_selected_game()
 
     def load_selected_game(self):
-        if self.saved_games[self.selected_index] == None:
-            self.refresh_saved_games_list()
         selected_file = self.saved_games[self.selected_index]
         with open(selected_file, 'rb') as f:
             self.loaded_data = pickle.load(f)
@@ -169,6 +160,7 @@ class loadGame():
 
         self.budget = self.loaded_data['budget']
 
+        self.state = GameState.FRONT_OFFICE
         return self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget
 
     def draw(self):
@@ -325,7 +317,7 @@ class PlayerTeamScreen:
         self.coachLastName = coachLastName
         self.selected_team = selected_team
         self.teamID = teamID
-        self.optionsPlayer = ["Play Game", "Front Office", "Roster", "Advance Week", "Options"]
+        self.optionsPlayer = ["Play Game", "Front Office", "Roster", "Hall of Fame", "Advance Week", "Options"]
         self.CoachingCredits = coachingCredits
         self.selectedPlayer = 0
         self.schedule = schedule
@@ -495,7 +487,6 @@ class FrontOffice:
                     elif selected_option == "Upgrade Rehab Facilities" and self.rehab_facilitys < 10:
                         self.rehab_facilitys += 1
                         self.CoachingCredits -= 1
-
                     self.save_account()
                 else:
                     print("Not enough coaching credits!")
@@ -558,7 +549,6 @@ class FrontOffice:
         # Draw horizontal options
         for j, option in enumerate(self.Horizontaloptions):
             x = 15 + j * 50
-            pyxel.text(15, 85, "Increase Salary Cap For 10 CC", 8)
             if self.axis == "horizontal" and j == self.selectedHorizontalOption:
                 pyxel.text(x, 100, "> " + option, 0)
             else:
@@ -632,10 +622,11 @@ class Budget:
         total_salaries = self.playerSalaries() + self.staffSalaries()
         tax = self.CompetitiveBalanceTax()
         
-        self.budget = total_revenue - total_salaries - tax
-        self.save_account()
-        return self.budget
+        available_budget = total_revenue - total_salaries - tax
+        return available_budget
 
+    def draw(self):
+        pass
 
 class Difficulty:
     def __init__(self, coachFirstName, coachLastName):
@@ -717,86 +708,65 @@ class Difficulty:
                 self.draw_centered_text(self.length // 2, y, option, 7)
 
 class FreeAgents:
-    def __init__(self, difficulty, salary_cap, budget, teamID, coachFirstName, coachLastName, training_facilitys):
-        self.difficulty_level = difficulty
-        self.salary_cap = salary_cap
-        self.budget = budget
-        self.team_id = teamID
-        self.coachFirstName = coachFirstName
-        self.coachLastName = coachLastName
-        self.training_facilitys = training_facilitys
-
-        self.current_free_agent_index = 0
-
-        self.free_agents = []
-        self.free_agent_players = []
-        self.free_agent_BA = []
-        self.free_agent_Fld = []
-        self.free_agent_star_ratings = []
-        self.free_agent_salaries = []
-        
-        self.original_players = []
-        self.BA = []
-        self.Fld = []
-        self.star_ratings = []
-        self.salaries = []
-        self.load_player_data(self.team_id)
-
+    def __init__(self):
         self.positions = ['P', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH']
-
-        self.randomNames = self.generate_random_names()
         self.free_agents = self.generate_free_agents()
 
-    def generate_random_names(self):
-        return [
-            'John Doe', 'Michael Johnson', 'David Wilson', 'Robert Lee', 
-            'William Martinez', 'Matthew Curtis', 'Brandon Attram', 
-            'Joshua Bryan', 'Andreas Pham', 'Yong Burnett', 'Chauncey Meyer', 
-            'Adalberto Green', 'Stanley Olsen', 'Jewel Pineda', 'Jame Kerr', 
-            'Russel Rowland', 'Corey Becker', 'Rosendo Glover', 'Kris Chan', 
-            'Tyler Compton', 'Sheldon Simpson', 'George Martinez', 'Guy Fisher', 
-            'Claude Price', 'Leonard Yu', 'Carter Atkins', 'Raul Frye', 
-            'Drew Koch', 'Victor Kirby', 'Benton Mcintyre', 'Damion Costa', 
-            'Ernest Forbes', 'Fredric Crane', 'Darell Pittman', 'Rickey Huber', 
-            'Marcelo Phelps', 'Bertram Vaughn', 'Sal Armstrong', 
-            'Jefferson Richardson', 'Tory Clay', 'Austin Hickman', 
-            'William Woods', 'Jody Bowers', 'Stacy Mccoy', 'Sang Patton', 
-            'Vern Ford', 'Gonzalo Peck', 'Jose Pierce', 'Armand Francis', 
-            'Jamaal Cortez', 'Blaine Espinoza', 'Eugenio Matthews', 
-            'William Floyd', 'Porfirio Perry', 'Jeramy Gibson', 
-            'Seth Beltran', 'Ricky Mathis'
-        ]
-
     def generate_free_agents(self):
-        free_agents = [
-            self.generate_free_agent('low'), *[self.generate_free_agent('mid') for _ in range(3)],
-            self.generate_free_agent('high')
-        ]
-        self.distribute_salaries()
+        free_agents = []
+
+        # One low-level free agent
+        free_agents.append(self.generate_free_agent('low'))
+
+        # Three mid-level free agents
+        for _ in range(3):
+            free_agents.append(self.generate_free_agent('mid'))
+
+        # One high-level free agent
+        free_agents.append(self.generate_free_agent('high'))
+
         return free_agents
 
     def generate_free_agent(self, level):
-        # Generate player details
-        fullname = random.choice(self.randomNames)
+        # Randomize position
         position = random.choice(self.positions)
 
-        if position == 'P':  # Pitcher
-            era = round(random.uniform(2.00, 5.50) if level == 'low' else (random.uniform(2.00, 2.50) if level == 'high' else random.uniform(3.00, 4.00)), 3)
-            ba, fa = None, round(random.uniform(0.950, 0.990), 3)
-        else:  # Non-pitcher
-            ba = round(random.uniform(0.200, 0.330) if level == 'high' else random.uniform(0.240, 0.280), 3)
-            fa, era = round(random.uniform(0.950, 0.990), 3), None
+        # Assign stats based on the level
+        if position == 'P':  # Pitcher (ERA)
+            if level == 'low':
+                era = random.uniform(4.50, 5.50)
+            elif level == 'mid':
+                era = random.uniform(3.00, 4.00)
+            else:  # high
+                era = random.uniform(2.00, 2.50)
+            ba, fa = None, random.uniform(0.950, 0.990)
+
+        else:  # Non-pitcher (BA and FA)
+            if level == 'low':
+                ba = random.uniform(0.200, 0.240)
+            elif level == 'mid':
+                ba = random.uniform(0.240, 0.280)
+            else:  # high
+                ba = random.uniform(0.280, 0.330)
+            era, fa = None, random.uniform(0.950, 0.990)
 
         # Calculate star ratings
         ba_stars, fa_stars, era_stars = self.calculate_star_rating(ba, fa, era)
 
-        # Append to lists for separate storage
-        self.free_agent_players.append({'fullname': fullname, 'position': position, 'era': era})
-        self.free_agent_BA.append(ba)
-        self.free_agent_Fld.append(fa)
-        self.free_agent_star_ratings.append((ba_stars, fa_stars, era_stars))
-        
-        return fullname  # Reference by name for simplicity
+        # Calculate salary
+        salary = self.calculate_salary(ba_stars, fa_stars, era_stars)
+
+        # Return the free agent's details
+        return {
+            'position': position,
+            'batting_average': ba,
+            'fielding_average': fa,
+            'earned_run_average': era,
+            'ba_stars': ba_stars,
+            'fa_stars': fa_stars,
+            'era_stars': era_stars,
+            'salary': salary
+        }
 
     def calculate_star_rating(self, ba=None, fa=None, era=None):
         ba_min, ba_max = 0.200, 0.300
@@ -832,161 +802,19 @@ class FreeAgents:
         if normalized_score is None:
             return None
         return round(normalized_score * 10) / 2
-    
-    def generate_salary_cap(self):
-        # Set budget based on difficulty level
-        mean, std_dev = 139, 45
-        if self.difficulty_level == 'Easy':
-            return min(mean + std_dev, np.random.normal(mean + std_dev, std_dev * 0.2))
-        elif self.difficulty_level == 'Medium':
-            return np.random.normal(mean, std_dev * 0.5)
-        elif self.difficulty_level == 'Hard':
-            return max(mean - std_dev, np.random.normal(mean - std_dev, std_dev * 0.2))
-        else:
-            return mean  # Default to mean if no valid difficulty level is provided
 
-    def distribute_salaries(self):
-        total_stars = sum((ba or 0) + (fa or 0) + (era or 0) for ba, fa, era in self.free_agent_star_ratings)
-        
-        # Calculate the deduction based on the training facilities level
-        facility_deduction = self.training_facilitys * 1  # 1M per level
-        
-        self.free_agent_salaries = [
-            round((self.salary_cap * ((ba or 0) + (fa or 0) + (era or 0)) / total_stars - facility_deduction), 2) if total_stars else 0
-            for ba, fa, era in self.free_agent_star_ratings
-        ]
+    def calculate_salary(self, ba_stars, fa_stars, era_stars):
+        base_salary = 800000  # Base salary in dollars
+        star_bonus = 1500000  # Bonus per star in dollars
+        total_stars = (ba_stars or 0) + (fa_stars or 0) + (era_stars or 0)
+        return base_salary + (total_stars * star_bonus)
 
-    def draw(self):
-        pyxel.cls(12)  # Clear the screen with a black background
-        pyxel.text(10, 10, "Free Agents", 1)
-
-
-        if self.free_agents:
-            if self.current_free_agent_index >= len(self.free_agent_players):
-                self.current_free_agent_index = 0  # Reset to the first index if out of range
-
-            player = self.free_agent_players[self.current_free_agent_index]
-            batting_average = self.free_agent_BA[self.current_free_agent_index]
-            fielding_average = self.free_agent_Fld[self.current_free_agent_index]
-            ba_stars, fa_stars, era_stars = self.free_agent_star_ratings[self.current_free_agent_index]
-            salary = self.free_agent_salaries[self.current_free_agent_index]
-
-            pyxel.rect(20, 30, 120, 80, 12)  # Player card background
-            pyxel.text(30, 35, f"Player Name: {player['fullname']}", 7)
-            pyxel.text(30, 45, f"Position: {player['position']}", 7)
-            pyxel.text(30, 55, f"Batting: {batting_average} ({ba_stars} stars)" if ba_stars is not None else f"Batting: {batting_average}", 7)
-            pyxel.text(30, 65, f"Pitching: {player['era']} ({era_stars} stars)" if era_stars is not None else f"Pitching: {player['era']}", 7)
-            pyxel.text(30, 75, f"Fielding: {fielding_average} ({fa_stars} stars)" if fa_stars is not None else f"Fielding: {fielding_average}", 7)
-            pyxel.text(30, 85, f"Salary: ${salary:,}", 7)
-            pyxel.text(20, 100, "Too Buy Free Agent Click Enter", 1)
-        else:
-            pyxel.text(30, 30, "No more Free Agents Avalible", 7)
-
-    def load_player_data(self, team_id):
-        filename = f'team_{team_id}_roster.pkl'
-        with open(filename, 'rb') as f:
-            data = pickle.load(f)
+    def display_free_agents(self):
+        for agent in self.free_agents:
+            print(f"Position: {agent['position']}, BA: {agent['batting_average']}, FA: {agent['fielding_average']}, "
+                  f"ERA: {agent['earned_run_average']}, BA Stars: {agent['ba_stars']}, FA Stars: {agent['fa_stars']}, "
+                  f"ERA Stars: {agent['era_stars']}, Salary: ${agent['salary']:,.2f}")
             
-        # Check format immediately after loading
-        if not all(k in data for k in ['players', 'BA', 'Fld', 'star_ratings', 'salaries']):
-            raise ValueError("Loaded player data is not in the expected format.")
-
-        self.original_players = data['players']
-        self.BA = data['BA']
-        self.Fld = data['Fld']
-        self.star_ratings = data['star_ratings']
-        self.salaries = data['salaries']
-
-    def update(self):
-        # Navigate through the free agents with left and right arrow keys
-        if pyxel.btnp(pyxel.KEY_RIGHT):
-            self.current_free_agent_index = (self.current_free_agent_index + 1) % len(self.free_agents)
-        elif pyxel.btnp(pyxel.KEY_LEFT):
-            self.current_free_agent_index = (self.current_free_agent_index - 1) % len(self.free_agents)
-
-        # Check if the user presses the "buy" button (e.g., RETURN key)
-        if pyxel.btnp(pyxel.KEY_RETURN):
-            # Get the current free agent's details
-            agent = self.free_agent_players[self.current_free_agent_index]
-            salary = self.free_agent_salaries[self.current_free_agent_index]
-
-            # Check if the user has enough budget to buy this player
-            if salary <= self.budget:
-                position = agent['position']
-                
-                # Attempt to find a player with the same position
-                try:
-                    position_index = next((i for i, player in enumerate(self.original_players) if player['position'] == position), None)
-                except TypeError:
-                    print("Error: `selected_players` is not a list of dictionaries.")
-                    return  # Exit the function if there's an error
-                
-                if position_index is not None:  # Replace if a player is already in this position
-                    self.original_players[position_index] = {
-                        'fullname': self.free_agent_players[self.current_free_agent_index]['fullname'],
-                        'era': self.free_agent_players[self.current_free_agent_index].get('era'),  # This will be None if 'era' is not present
-                        'position': self.free_agent_players[self.current_free_agent_index]['position']
-                    }
-
-                    self.BA[position_index] = self.free_agent_BA[self.current_free_agent_index]
-                    self.Fld[position_index] = self.free_agent_Fld[self.current_free_agent_index]
-                    self.star_ratings[position_index] = self.free_agent_star_ratings[self.current_free_agent_index]
-                    self.salaries[position_index] = self.free_agent_salaries[self.current_free_agent_index]  # Using the salary calculated for the free agent
-                
-                # Deduct agent's salary from the remaining budget
-                self.budget -= salary
-
-                # Mark the free agent as bought by removing them from the list or setting a flag
-                self.free_agent_players.pop(self.current_free_agent_index)
-                self.free_agent_BA.pop(self.current_free_agent_index)
-                self.free_agent_Fld.pop(self.current_free_agent_index)
-                self.free_agent_star_ratings.pop(self.current_free_agent_index)
-                self.free_agent_salaries.pop(self.current_free_agent_index)
-
-                # Reset the current index if it exceeds the length of the list
-                if self.current_free_agent_index >= len(self.free_agent_players):
-                    self.current_free_agent_index = 0
-
-                self.save_updated_roster()
-                self.save_account()
-
-            else:
-                print("Not enough budget to buy this player.")
-    
-    def save_account(self):
-        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
-        
-        # Check if file exists and load existing data
-        if os.path.exists(filename):
-            with open(filename, 'rb') as f:
-                account_data = pickle.load(f)
-        else:
-            # If no file exists, create a new dictionary
-            account_data = {}
-
-        # Update the relevant fields in the loaded account data
-        account_data['budget'] = self.budget
-
-        # Write updated data back to the file
-        with open(filename, 'wb') as f:
-            pickle.dump(account_data, f)
-        print(f"Account saved to {filename}")
-
-    def save_updated_roster(self):
-        updated_data = {
-            'players': self.original_players,
-            'BA': self.BA,
-            'Fld': self.Fld,
-            'star_ratings': self.star_ratings,
-            'salaries': self.salaries
-        }
-
-        filename = f"team_{self.team_id}_roster.pkl"
-        with open(filename, "wb") as f:
-            pickle.dump(updated_data, f)
-        print("Roster updated and saved to file.")
-
-
 class RosterScreen:
     def __init__(self, coachFirstName, coachLastName, selected_team, teamID, difficulty):
         self.coachFirstName = coachFirstName
@@ -1212,7 +1040,6 @@ class RosterScreen:
             if len(self.selected_players) < 11:
                 # Check if DH is missing and this player can be a DH
                 dh_selected = any(p['position'] == 'DH' for p in self.selected_players)
-                print(self.BA[self.current_player_index], self.Fld[self.current_player_index])
                 
                 if position in self.position_limits:
                     # Check if this position has not reached its limit
@@ -1230,10 +1057,8 @@ class RosterScreen:
             player = self.players[self.current_player_index]
             if player in self.selected_players:
                 self.selected_players.remove(player)
-
         if len(self.selected_players) == 11:
             if pyxel.btnp(pyxel.KEY_RETURN):
-                print(self.BA[self.current_player_index], self.Fld[self.current_player_index])
                 self.confirm_selection()
 
     def draw(self):
@@ -1276,12 +1101,12 @@ class RosterScreen:
                 player_id = mlb.get_people_id(player_info.fullname)[0]
                 position = player_info.primaryposition.abbreviation
 
-                batter_avg = 0.250
+                batter_avg = None
                 try: 
                     batter_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['hitting'], season=2024)
                     season_stats = batter_stats['hitting']['season']
                     for split in season_stats.splits:
-                        batter_avg = float('0' + split.stat.avg) if split.stat.avg != '0.0' else 0.250
+                        batter_avg = float('0' + split.stat.avg)
                         break
                 except KeyError:
                     pass
@@ -1293,14 +1118,14 @@ class RosterScreen:
                     pitcher_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['pitching'], season=2024)
                     season_stats = pitcher_stats['pitching']['season']
                     for split in season_stats.splits:
-                        era = float(split.stat.era) if split.stat.era != '0.0' else 3.0
+                        era = float(split.stat.era)
                         break
                 except KeyError:
                     pass
                 except TypeError:
                     pass
 
-                fielding_avg = 0.950
+                fielding_avg = None
                 try:
                     fielding_stats = mlb.get_player_stats(player_id, stats=['season'], groups=['fielding'], season=2024)
                     season_stats = fielding_stats['fielding']['season']
@@ -1333,12 +1158,11 @@ class RosterScreen:
                 return self.players, self.BA, self.Fld, self.star_ratings
             
 class ViewRoster:
-    def __init__(self, selected_team, teamID, salary_cap, budget):
+    def __init__(self, selected_team, teamID, salary_cap):
         self.selected_team = selected_team
         self.teamID = teamID
         self.salary_cap = salary_cap
         self.current_player_index = 0
-        self.budget = budget
         
         self.filename = f"team_{self.teamID}_roster.pkl"
 
@@ -1352,7 +1176,8 @@ class ViewRoster:
         self.salaries = data['salaries']
     
     def draw_salary_bar(self):
-        filled_width = min(120, int((self.salary_cap / (self.salary_cap + self.budget)) * 120))
+        self.total_salary = sum(self.salaries)
+        filled_width = min(120, int((self.total_salary / self.salary_cap) * 120))
         pyxel.rectb(20, 110, 120, 10, 1)
         pyxel.rect(21, 111, filled_width, 8, 3)
     
@@ -1368,7 +1193,7 @@ class ViewRoster:
             salary = self.salaries[self.current_player_index]
 
             pyxel.rect(20, 30, 120, 80, 1)  # Player card background
-            pyxel.text(30, 100, f"BUDGET ${self.salary_cap:.1f}M / ${round((self.salary_cap + self.budget), 3)}M", 7)
+            pyxel.text(30, 100, f"SALARY CAP ${self.total_salary:.1f}M / {self.salary_cap}M", 7)
             pyxel.text(30, 35, f"Player Name: {player['fullname']}", 7)
             pyxel.text(30, 45, f"Position: {player['position']}", 7)
             pyxel.text(30, 55, f"Batting: {batting_average} ({ba_stars} stars)" if ba_stars is not None else f"Batting: {batting_average}", 7)
@@ -1527,59 +1352,23 @@ class PlayGameScreen(Schedule):
 
         for player in self.players:
             position = player['position']
-            if position == 'P' and self.pitcher == None:
+            if position == 'P':
                 self.pitcher = player  # Assign the pitcher
-            elif len(self.batting_order) < 9 and position != 'P':
+            elif len(self.batting_order) < 9:
                 self.batting_order.append(player)
                 filled_positions.add(position)
             else:
                 self.bench.append(player)
 
-        # Populate remaining players list
-        self.remaining_players = [player for player in self.bench]  # Initialize remaining players from bench
-
         for player in self.opponent_players:
             position = player['position']
             if position == 'P':
-                self.opponent_pitcher = player  # Assign the opponent pitcher
+                self.opponent_pitcher = player  # Assign the pitcher
             elif len(self.opponent_batting_order) < 9:
                 self.opponent_batting_order.append(player)
                 filled_positions.add(position)
             else:
                 self.opponent_bench.append(player)
-
-
-    def swap_players(self):
-        """Swap the currently selected player from the remaining players with a player in the batting order or the pitcher."""
-        if self.remaining_players:
-            selected_player = self.remaining_players[self.current_player_index]
-            print(f"Swapping with: {selected_player['fullname']} (Position: {selected_player['position']})")  # Debug statement
-
-            # Check if the selected player is the pitcher
-            if selected_player['position'] == 'P':
-                if self.pitcher != selected_player:  # Ensure we're not swapping the same player
-                    print(f"Swapping pitcher: {self.pitcher['fullname']} with {selected_player['fullname']}")  # Debug statement
-                    self.remaining_players.append(self.pitcher)  # Add current pitcher to the bench
-                    self.pitcher = selected_player  # Set new pitcher
-                    self.remaining_players.remove(selected_player)  # Remove from remaining players
-                else:
-                    print("Selected player is already the pitcher, no swap performed.")  # Debug statement
-            else:
-                # Find the position of the selected player in the batting order
-                for i, player in enumerate(self.batting_order):
-                    if player['position'] == selected_player['position']:
-                        print(f"Swapping {player['fullname']} with {selected_player['fullname']}")  # Debug statement
-                        self.batting_order[i] = selected_player  # Replace player in batting order
-                        self.remaining_players.remove(selected_player)  # Remove from remaining players
-                        self.bench.append(player)  # Add the replaced player to the bench
-                        break
-                else:
-                    print("No player in batting order with the same position to swap.")  # Debug statement
- # Call draw to refresh the screen after a swap
-        else:
-            print("No remaining players to swap with.")  # Debug statement
-
-
 
     def update(self):
         if self.mode == 'cycle':
@@ -1589,9 +1378,6 @@ class PlayGameScreen(Schedule):
                 self.current_player_index = (self.current_player_index + 1) % len(self.remaining_players)
             elif pyxel.btnp(pyxel.KEY_DOWN):
                 self.mode = 'play'
-            elif pyxel.btnp(pyxel.KEY_S):
-                self.swap_players()
-                self.draw() 
             elif pyxel.btnp(pyxel.KEY_B):
                 self.mode = 'Batting Order'
             elif pyxel.btnp(pyxel.KEY_D):
@@ -1600,29 +1386,8 @@ class PlayGameScreen(Schedule):
             if pyxel.btnp(pyxel.KEY_UP):
                 self.mode = 'cycle'
         elif self.mode == 'Batting Order':
-            if pyxel.btnp(pyxel.KEY_O):  # Example key to change batting order
-                self.current_player_index = 0
-                self.mode = 'Change Batting Order'
             if pyxel.btnp(pyxel.KEY_B):
                 self.mode = 'cycle'
-
-        elif self.mode == 'Change Batting Order':
-            if pyxel.btnp(pyxel.KEY_UP):
-                # Move the selected player up in the order
-                if self.current_player_index > 0:
-                    self.batting_order[self.current_player_index], self.batting_order[self.current_player_index - 1] = \
-                        self.batting_order[self.current_player_index - 1], self.batting_order[self.current_player_index]
-                    self.current_player_index -= 1
-            elif pyxel.btnp(pyxel.KEY_DOWN):
-                # Move the selected player down in the order
-                if self.current_player_index < len(self.batting_order) - 1:
-                    self.batting_order[self.current_player_index], self.batting_order[self.current_player_index + 1] = \
-                        self.batting_order[self.current_player_index + 1], self.batting_order[self.current_player_index]
-                    self.current_player_index += 1
-            elif pyxel.btnp(pyxel.KEY_B):  # Press B to go back to cycle mode
-                self.current_player_index = 0
-                self.mode = 'Batting Order'
-
         elif self.mode == 'Oppenent Batting Order':
             if pyxel.btnp(pyxel.KEY_B):
                 self.mode = 'Other Team'
@@ -1638,17 +1403,6 @@ class PlayGameScreen(Schedule):
         pyxel.text(60, 7, "PLAY GAME", 1)
 
         filled_positions = set()  # Reset filled positions
-
-        if self.mode == 'Change Batting Order':
-            y = 20
-            pyxel.text(10, 10, 'Change Batting Order', 7)
-            for i, player in enumerate(self.batting_order):
-                text = f"{i + 1}. {player['fullname']} - {player['position']}"
-                if i == self.current_player_index:
-                    pyxel.text(20, y, text, 8)  # Highlight selected player
-                else:
-                    pyxel.text(20, y, text, 0)
-                y += 10
         
         if self.mode =='play':
             x, y = 40, 50
@@ -1657,19 +1411,15 @@ class PlayGameScreen(Schedule):
 
         # Display the players from the selected team
         if self.mode == 'cycle':
-                for player in self.batting_order:
-                    position = player['position']
-                    if position in self.position_coords and position not in filled_positions:
-                        x, y = self.position_coords[position]
-                        text = f"{player['fullname']} \n{position}"
-                        pyxel.text(x, y, text, 0)
-                        filled_positions.add(position)
-
-                # Display the pitcher separately
-                if self.pitcher:
-                    x, y = self.position_coords['P']
-                    text = f"{self.pitcher['fullname']} \nP"
+            for player in self.players:
+                position = player['position']
+                if position in self.position_coords and position not in filled_positions:
+                    x, y = self.position_coords[position]
+                    text = f"{player['fullname']} \n{position}"
                     pyxel.text(x, y, text, 0)
+                    filled_positions.add(position)
+                else:
+                    self.remaining_players.append(player)
 
         # Display the opponent team (if not a BYE week)
         if self.mode == 'Other Team':
@@ -2130,9 +1880,7 @@ class Game:
             pyxel.text(self.score_coords['batter'][0], self.score_coords['batter'][1], f"{self.opponent_current_batter_index}. Batter: {current_batter}", 7)
 
 class PostGameScreen:
-    def __init__(self, home_score, away_score, batting_order, opponent_batting_order, wins, losses, coachFirstName, coachLastName, round_num, CoachingCredits, rehab_facilitys):
-        self.rehab_facilitys = rehab_facilitys
-        self.CoachingCredits = CoachingCredits
+    def __init__(self, home_score, away_score, batting_order, opponent_batting_order, wins, losses, coachFirstName, coachLastName, round_num):
         self.round_num = round_num
         self.coachFirstName = coachFirstName
         self.coachLastName = coachLastName
@@ -2159,35 +1907,11 @@ class PostGameScreen:
             self.wins += 1
             self.losses = self.losses
             self.round_num += 1
-            if self.rehab_facilitys > 2:
-                self.CoachingCredits += 6
-                if self.rehab_facilitys > 4:
-                    self.CoachingCredits += 1
-                    if self.rehab_facilitys > 6:
-                        self.CoachingCredits += 1
-                        if self.rehab_facilitys > 8:
-                            self.CoachingCredits += 1
-                            if self.rehab_facilitys == 10:
-                                self.CoachingCredits += 1
-            else:
-                self.CoachingCredits += 5
             self.save_account()
         elif self.winner == "Away":
             self.losses += 1
             self.wins = self.wins
             self.round_num += 1
-            if self.rehab_facilitys > 2:
-                self.CoachingCredits += 3
-                if self.rehab_facilitys > 4:
-                    self.CoachingCredits += 1
-                    if self.rehab_facilitys > 6:
-                        self.CoachingCredits += 1
-                        if self.rehab_facilitys > 8:
-                            self.CoachingCredits += 1
-                            if self.rehab_facilitys == 10:
-                                self.CoachingCredits += 1
-            else:
-                self.CoachingCredits += 2
             self.save_account()
         else:
             pass
@@ -2221,7 +1945,6 @@ class PostGameScreen:
         account_data['wins'] = self.wins
         account_data['losses'] = self.losses
         account_data['round_num'] = self.round_num
-        account_data['CoachingCredits'] = self.CoachingCredits
 
         # Write updated data back to the file
         with open(filename, 'wb') as f:
@@ -2330,7 +2053,6 @@ class GameStateManager:
         self.difficulty_screen = None
         self.budget_screen = None
         self.view_roster = None
-        self.free_agents = None
 
     def update(self):
         if self.menu.state == GameState.MENU:
@@ -2365,8 +2087,6 @@ class GameStateManager:
             self.update_post_game()
         elif self.menu.state == GameState.VIEW_ROSTER:
             self.update_view_roster()
-        elif self.menu.state == GameState.FREE_AGENTS:
-            self.update_free_agents()
 
     def draw(self):
         if self.menu.state == GameState.MENU:
@@ -2401,8 +2121,6 @@ class GameStateManager:
             self.post_game_screen.draw()
         elif self.menu.state == GameState.VIEW_ROSTER and self.view_roster:
             self.view_roster.draw()
-        elif self.menu.state == GameState.FREE_AGENTS and self.free_agents:
-            self.free_agents.draw()
 
     def update_team_selection(self):
         self.selected_team, self.teamID = self.team_selection_screen.update()
@@ -2454,6 +2172,7 @@ class GameStateManager:
             self.roster_screen = RosterScreen(self.coachFirstName, self.coachLastName, self.selected_team, self.teamID, self.difficulty)
             self.menu.state = GameState.ROSTER_SCREEN
 
+
     def update_player_team_screen(self):
         self.player_team_screen.update()
 
@@ -2469,7 +2188,7 @@ class GameStateManager:
             elif selected_option == "Roster":
                 self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
-                self.view_roster = ViewRoster(self.selected_team, self.teamID, self.salary_cap, self.budget)
+                self.view_roster = ViewRoster(self.selected_team, self.teamID, self.salary_cap)
                 self.menu.state = GameState.VIEW_ROSTER
 
             elif selected_option == "Play Game":
@@ -2510,98 +2229,17 @@ class GameStateManager:
 
                 budget = Budget(self.coachFirstName, self.coachLastName, self.revenue, self.salary_cap)
                 self.budget = budget.AvailableBudget()
-
+                
                 schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, current_round)
                 self.schedule = schedule_.get_schedule()
-
-                self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, current_round, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget)
+                self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget)
                 self.menu.state = GameState.PLAYER_TEAM_SCREEN
-                
 
     def update_front_office(self):
         if self.front_office:
             self.front_office.update()
-            if pyxel.btnp(pyxel.KEY_RETURN):
-                if self.front_office.axis == "vertical":
-                    selected_option = self.front_office.Verticaloptions[self.front_office.selectedVerticalOption]
-                else:
-                    selected_option = self.front_office.Horizontaloptions[self.front_office.selectedHorizontalOption]
-                
-                if selected_option == "Free \n Agents":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-
-                    self.free_agents = FreeAgents(self.difficulty, self.salary_cap, self.budget, self.teamID, self.coachFirstName, self.coachLastName, self.training_facilitys)
-                    self.menu.state = GameState.FREE_AGENTS
-
-                if selected_option == "Increase \n Salary Cap":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-                    if self.CoachingCredits >= 10:
-                        self.CoachingCredits -= 10
-                        self.budget += 10
-
-                        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
-            
-                        # Check if file exists and load existing data
-                        if os.path.exists(filename):
-                            with open(filename, 'rb') as f:
-                                account_data = pickle.load(f)
-                        else:
-                            # If no file exists, create a new dictionary
-                            account_data = {}
-
-                        # Update the relevant fields in the loaded account data
-                        account_data['budget'] = self.budget
-                        account_data['CoachingCredits'] = self.CoachingCredits
-
-                        # Write updated data back to the file
-                        with open(filename, 'wb') as f:
-                            pickle.dump(account_data, f)
-                        print(f"Account saved to {filename}")
-
-                        self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-
-                        self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
-                        self.menu.state = GameState.FRONT_OFFICE
-                
-                if selected_option == "Upgrade Stadium":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-                    if self.CoachingCredits >= 1:
-                        self.budget += 0.5
-
-                        filename = f"{self.coachFirstName}_{self.coachLastName}_account.pkl"
-
-                        # Check if file exists and load existing data
-                        if os.path.exists(filename):
-                            with open(filename, 'rb') as f:
-                                account_data = pickle.load(f)
-                        else:
-                            # If no file exists, create a new dictionary
-                            account_data = {}
-
-                        # Update the relevant fields in the loaded account data
-                        account_data['budget'] = self.budget
-                        account_data['CoachingCredits'] = self.CoachingCredits
-
-                        # Write updated data back to the file
-                        with open(filename, 'wb') as f:
-                            pickle.dump(account_data, f)
-                        print(f"Account saved to {filename}")
-
-                        self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-
-                        self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
-                        self.menu.state = GameState.FRONT_OFFICE
-            
-            if pyxel.btnp(pyxel.KEY_BACKSPACE):
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
-                self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget)
-                self.menu.state = GameState.PLAYER_TEAM_SCREEN
-            
-    def update_free_agents(self):
-        if self.free_agents:
-            self.free_agents.update()
         if pyxel.btnp(pyxel.KEY_BACKSPACE):
-            self.menu.state = GameState.FRONT_OFFICE
+            self.menu.state = GameState.PLAYER_TEAM_SCREEN
  
     def update_play_game_screen(self):
         if self.play_game_screen:
@@ -2626,7 +2264,7 @@ class GameStateManager:
             if self.game.inning > 9 and self.game.home_score != self.game.away_score:
                 self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
                 self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
-                self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order, self.wins, self.losses, self.coachFirstName, self.coachLastName, self.round_num, self.CoachingCredits, self.rehab_facilitys)
+                self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order, self.wins, self.losses, self.coachFirstName, self.coachLastName, self.round_num)
                 self.menu.state = GameState.POST_GAME
     
     def update_post_game(self):
