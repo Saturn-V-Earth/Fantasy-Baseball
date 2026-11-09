@@ -74,8 +74,8 @@ class TeamSelectionScreen:
         self.mlb_teamsNL = mlb_teamsNL
         self.mlb_teamsAL = mlb_teamsAL
         self.teams = {
-            "American League": self.mlb_teamsNL,
-            "National League": self.mlb_teamsAL
+            "American League": self.mlb_teamsAL,
+            "National League": self.mlb_teamsNL
         }
         self.selected_section = "American League"
         self.selected_team = 0
@@ -110,7 +110,7 @@ class TeamSelectionScreen:
 
         section_teams = self.teams[self.selected_section]
         for i, team in enumerate(section_teams):
-            y = 30 + i/2 * 12
+            y = 30 + i * 6
             if i == self.selected_team:
                 pyxel.text(10 if self.selected_section == "American League" else 10, y, "> " + team, 0)
             else:
@@ -130,8 +130,17 @@ class loadGame():
             key=lambda x: os.path.getmtime(x),
             reverse=True
         )
+        if not self.saved_games:
+            self.selected_index = 0
+        else:
+            self.selected_index = min(self.selected_index, len(self.saved_games) - 1)
     
     def update(self):
+        if not self.saved_games:
+            if pyxel.btnp(pyxel.KEY_RETURN):
+                self.refresh_saved_games_list()
+            return
+
         if pyxel.btnp(pyxel.KEY_UP):
             self.selected_index = (self.selected_index - 1) % len(self.saved_games)
         elif pyxel.btnp(pyxel.KEY_DOWN):
@@ -140,8 +149,9 @@ class loadGame():
             self.load_selected_game()
 
     def load_selected_game(self):
-        if self.saved_games[self.selected_index] == None:
+        if not self.saved_games:
             self.refresh_saved_games_list()
+            return None
         selected_file = self.saved_games[self.selected_index]
         with open(selected_file, 'rb') as f:
             self.loaded_data = pickle.load(f)
@@ -174,6 +184,10 @@ class loadGame():
     def draw(self):
         pyxel.cls(12)
         pyxel.text(10, 10, "Load Game Save", 1)
+        if not self.saved_games:
+            pyxel.text(10, 25, "No save files found.", 8)
+            pyxel.text(10, 35, "Press ENTER to refresh.", 7)
+            return
         for i, filename in enumerate(self.saved_games):
             y = 60 + i * 10
             if i == self.selected_index:
@@ -2407,13 +2421,16 @@ class GameStateManager:
     def update_team_selection(self):
         self.selected_team, self.teamID = self.team_selection_screen.update()
         if self.selected_team:
-            self.create_account_screen = CreateAccountScreen(self.selected_team, self.teamID)
+            self.create_account_screen = CreateAccountScreen(self.teamID, self.selected_team)
             self.menu.state = GameState.CREATE_ACCOUNT
 
     def update_load_game(self):
         self.load_game.update()
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+            loaded_game = self.load_game.load_selected_game()
+            if loaded_game is None:
+                return
+            self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = loaded_game
 
             schedule_ = Schedule(mlb_teamsNL, mlb_teamsAL, self.selected_team, self.round_num)
             self.schedule = schedule_.get_schedule()
@@ -2450,7 +2467,7 @@ class GameStateManager:
             self.revenue = self.difficulty_screen.revenue
             
             self.coachFirstName, self.coachLastName = self.create_account_screen.coachFirstName, self.create_account_screen.coachLastName
-            self.teamID, self.selected_team, = self.create_account_screen.selected_team, self.create_account_screen.teamID
+            self.teamID, self.selected_team = self.create_account_screen.teamID, self.create_account_screen.selected_team
             self.roster_screen = RosterScreen(self.coachFirstName, self.coachLastName, self.selected_team, self.teamID, self.difficulty)
             self.menu.state = GameState.ROSTER_SCREEN
 
@@ -2461,19 +2478,19 @@ class GameStateManager:
             selected_option = self.player_team_screen.optionsPlayer[self.player_team_screen.selectedPlayer]
             
             if selected_option == "Front Office":
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                 self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
                 self.menu.state = GameState.FRONT_OFFICE
 
             elif selected_option == "Roster":
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                 self.view_roster = ViewRoster(self.selected_team, self.teamID, self.salary_cap, self.budget)
                 self.menu.state = GameState.VIEW_ROSTER
 
             elif selected_option == "Play Game":
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                 self.play_game_screen = PlayGameScreen(
                     mlb_teamsNL,        # First argument
@@ -2496,7 +2513,7 @@ class GameStateManager:
             self.roster_screen.update()
         if len(self.roster_screen.selected_players) == 11:
             if pyxel.btnp(pyxel.KEY_RETURN):
-                self.teamID, self.selected_team, = self.create_account_screen.selected_team, self.create_account_screen.teamID
+                self.teamID, self.selected_team = self.create_account_screen.teamID, self.create_account_screen.selected_team
 
                 print(self.selected_team, self.teamID)
 
@@ -2528,13 +2545,13 @@ class GameStateManager:
                     selected_option = self.front_office.Horizontaloptions[self.front_office.selectedHorizontalOption]
                 
                 if selected_option == "Free \n Agents":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                    self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                     self.free_agents = FreeAgents(self.difficulty, self.salary_cap, self.budget, self.teamID, self.coachFirstName, self.coachLastName, self.training_facilitys)
                     self.menu.state = GameState.FREE_AGENTS
 
                 if selected_option == "Increase \n Salary Cap":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                    self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
                     if self.CoachingCredits >= 10:
                         self.CoachingCredits -= 10
                         self.budget += 10
@@ -2558,13 +2575,13 @@ class GameStateManager:
                             pickle.dump(account_data, f)
                         print(f"Account saved to {filename}")
 
-                        self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                        self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                         self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
                         self.menu.state = GameState.FRONT_OFFICE
                 
                 if selected_option == "Upgrade Stadium":
-                    self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                    self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
                     if self.CoachingCredits >= 1:
                         self.budget += 0.5
 
@@ -2587,13 +2604,13 @@ class GameStateManager:
                             pickle.dump(account_data, f)
                         print(f"Account saved to {filename}")
 
-                        self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                        self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
 
                         self.front_office = FrontOffice(self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName)
                         self.menu.state = GameState.FRONT_OFFICE
             
             if pyxel.btnp(pyxel.KEY_BACKSPACE):
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
                 self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget)
                 self.menu.state = GameState.PLAYER_TEAM_SCREEN
             
@@ -2609,7 +2626,7 @@ class GameStateManager:
         if pyxel.btnp(pyxel.KEY_BACKSPACE):
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+            self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
             self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
             self.opponent_team_id = self.play_game_screen.opponent_team_id
             self.game = Game(self.batting_order, self.opponent_batting_order, self.bench, self.teamID, self.opponent_team_id)
@@ -2624,14 +2641,14 @@ class GameStateManager:
             if not self.game.batter_turn_started or (self.game.strike < 3 and self.game.ball < 4):
                 self.game.batter_turn() 
             if self.game.inning > 9 and self.game.home_score != self.game.away_score:
-                self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+                self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
                 self.batting_order, self.opponent_batting_order, self.bench = self.play_game_screen.batting_order, self.play_game_screen.opponent_batting_order, self.play_game_screen.bench
                 self.post_game_screen = PostGameScreen(self.game.home_score, self.game.away_score, self.batting_order, self.opponent_batting_order, self.wins, self.losses, self.coachFirstName, self.coachLastName, self.round_num, self.CoachingCredits, self.rehab_facilitys)
                 self.menu.state = GameState.POST_GAME
     
     def update_post_game(self):
         if pyxel.btnp(pyxel.KEY_RETURN):
-            self.selected_team, self.teamID, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
+            self.teamID, self.selected_team, self.CoachingCredits, self.stadium, self.training_facilitys, self.rehab_facilitys, self.coachFirstName, self.coachLastName, self.round_num, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget = self.load_game.load_selected_game()
             self.player_team_screen = PlayerTeamScreen(self.selected_team, self.teamID, self.schedule, self.CoachingCredits, self.round_num, self.coachFirstName, self.coachLastName, self.wins, self.losses, self.difficulty, self.revenue, self.salary_cap, self.budget)
             self.menu.state = GameState.PLAYER_TEAM_SCREEN
         if pyxel.btnp(pyxel.KEY_Q):
